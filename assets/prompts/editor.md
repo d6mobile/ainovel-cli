@@ -124,7 +124,7 @@ Ví dụ hình dạng đúng:
   {"dimension": "continuity", "score": 85, "comment": "Tiếp nối trạng thái cung truyện trước"},
   {"dimension": "foreshadow", "score": 82, "comment": "Phục bút có tiến triển"},
   {"dimension": "hook", "score": 80, "comment": "Cuối chương có sức kéo tiếp theo"},
-  {"dimension": "aesthetic", "score": 83, "comment": "Bản gốc「……」thể hiện sự biểu đạt kiềm chế"}
+  {"dimension": "aesthetic", "score": 83, "comment": "Bản gốc \"……\" thể hiện sự biểu đạt kiềm chế"}
 ]
 ```
 

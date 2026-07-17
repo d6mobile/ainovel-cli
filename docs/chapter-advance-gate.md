@@ -1,37 +1,37 @@
 # Chapter Advance Gate
 
-> 状态：已实现
-> 日期：2026-07-14
-> 解决：逐章验收、干预后安全暂停、崩溃恢复下的精确章节许可
+> Trạng thái: đã triển khai
+> Ngày: 2026-07-14
+> Mục tiêu: nghiệm thu theo từng chương, tạm dừng an toàn sau can thiệp, và cấp phép viết chương chính xác khi khôi phục sau sự cố
 
-## 1. 为什么需要它
+## 1. Vì sao cần cơ chế này
 
-长篇自动创作的核心风险不是多消耗一次调用，而是用户审读期间系统继续写入新章，并把建立在旧剧情上的摘要、角色状态和大纲反馈折入后续事实源。删除多写的一章并不能自动撤销这些派生状态，用户会因此失去对创作过程的信任。
+Rủi ro lớn nhất của sáng tác tự động dài kỳ không phải là tốn thêm một lần gọi model, mà là trong lúc người dùng đang xem lại, hệ thống vẫn tiếp tục viết chương mới và kéo các tóm tắt, trạng thái nhân vật, cùng phản hồi đề cương dựa trên nội dung cũ vào nguồn факт tiếp theo. Xoá một chương viết thừa không tự động hoàn tác các trạng thái phát sinh này, và người dùng sẽ mất niềm tin vào quy trình sáng tác.
 
-项目仍以“给出目标后持续自主完成”为默认定位，所以不把每章确认变成全局默认。系统提供两种明确政策：
+Hệ thống vẫn giữ mặc định là “đã có mục tiêu thì tiếp tục tự chạy đến khi hoàn thành”, vì vậy không biến xác nhận theo từng chương thành hành vi mặc định toàn cục. Hệ thống chỉ cung cấp hai chính sách rõ ràng:
 
-- `auto`：默认模式，持续自主推进；
-- `review`：用户主动选择的逐章验收模式，每个正向新章都需要一次精确许可。
+- `auto`: chế độ mặc định, tự động tiến hành liên tục;
+- `review`: chế độ nghiệm thu từng chương do người dùng chủ động chọn, mỗi chương mới theo chiều tiến lên đều cần một lần cấp phép chính xác.
 
-这不是把工作流交还给 Coordinator LLM。何时需要用户确认是用户政策；下一步确定性流程仍由 Route 推导；是否需要一次性停下来验收某次干预结果，才由 Arbiter 做语义判断。
+Đây không phải là việc trả workflow lại cho Coordinator LLM. Việc nào cần người dùng xác nhận là chính sách của người dùng; bước kế tiếp vẫn do Route suy ra một cách xác định; còn việc có nên dừng lại để nghiệm thu một kết quả can thiệp hay không thì do Arbiter phán đoán ngữ nghĩa.
 
-## 2. 边界划分
+## 2. Phân định ranh giới
 
-| 问题 | 归属 | 原因 |
+| Vấn đề | Thuộc về | Lý do |
 |---|---|---|
-| 当前是否为逐章验收模式 | RunMeta / Host | 用户持久运行意图 |
-| 哪一章已获许可 | RunMeta / Gate | 可验证、可恢复的机械事实 |
-| 下一步运行哪个 Worker | `flow.Route` | 从创作事实纯函数推导 |
-| 指令是否开始一个正向新章 | `flow.StartsForwardChapter` | 类型化机械判断 |
-| “改完让我看看”是否需要暂停 | Arbiter | 自然语言语义判断 |
-| 暂停何时触发 | `ChapterAdvanceGate` | 对一次性意图做确定性执行 |
-| 预算是否允许继续 | `BudgetSentinel` | 独立 Host 政策 |
+| Có đang ở chế độ nghiệm thu theo từng chương không | RunMeta / Host | Ý định chạy bền vững của người dùng |
+| Chương nào đã được cấp phép | RunMeta / Gate | Sự thật cơ học, có thể kiểm tra và khôi phục |
+| Worker nào sẽ chạy ở bước tiếp theo | `flow.Route` | Suy ra thuần từ dữ liệu sáng tác |
+| Một chỉ thị có bắt đầu một chương mới theo chiều tiến lên hay không | `flow.StartsForwardChapter` | Phán định cơ học đã kiểu hoá |
+| “Sửa xong cho tôi xem lại” có cần tạm dừng không | Arbiter | Phán định ngữ nghĩa từ ngôn ngữ tự nhiên |
+| Khi nào việc tạm dừng được kích hoạt | `ChapterAdvanceGate` | Thực thi xác định cho một ý định dùng một lần |
+| Ngân sách có cho phép tiếp tục không | `BudgetSentinel` | Chính sách Host độc lập |
 
-`AdvanceMode`、章节许可和一次性 hold 不进入 Route 决策表，也不允许模型修改。Route 的创作状态机与逐章验收政策保持正交。
+`AdvanceMode`, giấy phép chương và hold dùng một lần không đi vào bảng quyết định của Route, cũng không cho phép model tự sửa. Máy trạng thái sáng tác của Route và chính sách nghiệm thu theo từng chương phải giữ tính trực giao.
 
-## 3. 最小状态模型
+## 3. Mô hình trạng thái tối thiểu
 
-`meta/run.json` 中只增加三项运行意图：
+Trong `meta/run.json` chỉ thêm ba ý định chạy:
 
 ```go
 type RunMeta struct {
@@ -56,26 +56,26 @@ type AdvanceHold struct {
 }
 ```
 
-没有通用 PolicyEngine、条件数组、许可队列、过期时间或策略版本。已有真实需求只需要一个持久模式、一个精确许可和一个一次性 hold。
+Không có PolicyEngine tổng quát, không có mảng điều kiện, không có hàng đợi cấp phép, không có thời hạn, cũng không có phiên bản chính sách. Nhu cầu thực tế hiện tại chỉ cần một chế độ bền vững, một giấy phép chính xác và một hold dùng một lần.
 
-### 3.1 不变量
+### 3.1 Bất biến
 
-1. `AdvanceMode` 只能为 `auto` 或 `review`；未知值返回 `UnsupportedAdvanceModeError`。
-2. 未知模式不得启动 Host，也不得改写 RunMeta。
-3. `auto` 下许可必须为 `0`。
-4. `review` 下许可只能为 `0` 或一个正整数章节号。
-5. 同目标重复授权幂等，不同目标不得覆盖在途许可。
-6. 许可仅约束“开始尚未完成的正向新章”；规划、评审、返工、打磨和提交恢复不受阻断。
-7. 许可与章节号绑定，不与某次进程运行或某次 Worker 调用绑定。
-8. 只有目标章已经进入 `CompletedChapters`、对应 `PendingCommit` 已清空、且存在该章 `commit` checkpoint 时，许可才算稳定消费。
-9. 目标章已完成但缺 commit checkpoint 属于状态损坏：显式报错并暂停，不猜测修复。
-10. 未完成许可必须等于 `Progress.NextChapter()`。`PendingRewrites` 不改变 `NextChapter()`，所以返工与在途正向许可可以机械共存。
-11. `AdvanceHold` 只能使用 `boundary` 或 `rewrites_drained`，且必须携带非空原因。
-12. hold 与许可使用 compare-and-clear；状态被新动作替换时不得误清。
+1. `AdvanceMode` chỉ có thể là `auto` hoặc `review`; giá trị lạ trả về `UnsupportedAdvanceModeError`.
+2. Chế độ không hợp lệ thì không được khởi động Host, cũng không được ghi đè RunMeta.
+3. Ở chế độ `auto`, giấy phép phải bằng `0`.
+4. Ở chế độ `review`, giấy phép chỉ có thể là `0` hoặc một số thứ tự chương dương.
+5. Cấp lại cùng một đích phải idempotent; đích khác không được ghi đè giấy phép đang có.
+6. Giấy phép chỉ ràng buộc “bắt đầu một chương mới theo chiều tiến lên mà chưa hoàn tất”; các bước lập kế hoạch, đánh giá, sửa lại, hoàn thiện và khôi phục khi commit không bị chặn.
+7. Giấy phép gắn với số chương, không gắn với một lần chạy tiến trình hay một lần gọi Worker cụ thể.
+8. Chỉ khi chương mục tiêu đã nằm trong `CompletedChapters`, `PendingCommit` tương ứng đã rỗng, và tồn tại checkpoint `commit` của chương đó thì giấy phép mới được coi là đã tiêu thụ ổn định.
+9. Chương đã hoàn tất nhưng thiếu checkpoint `commit` là trạng thái hỏng: phải báo lỗi rõ ràng và tạm dừng, không được tự đoán cách sửa.
+10. Giấy phép chưa hoàn tất phải đúng bằng `Progress.NextChapter()`. `PendingRewrites` không làm đổi `NextChapter()`, nên việc sửa lại và giấy phép tiến lên đang treo có thể cùng tồn tại theo cơ học.
+11. `AdvanceHold` chỉ được dùng `boundary` hoặc `rewrites_drained`, và phải có lý do không rỗng.
+12. Hold và giấy phép đều dùng compare-and-clear; trạng thái bị một hành động mới thay thế thì không được xoá nhầm.
 
-## 4. Store API
+## 4. API của Store
 
-RunMetaStore 提供窄而类型化的原子操作：
+RunMetaStore cung cấp các thao tác nguyên tử, hẹp và có kiểu rõ ràng:
 
 ```go
 SetAdvanceMode(mode domain.ChapterAdvanceMode) error
@@ -85,16 +85,16 @@ SetAdvanceHold(hold domain.AdvanceHold) error
 ClearAdvanceHold(expected domain.AdvanceHold) error
 ```
 
-- 切回 `auto` 时在同一写锁内清除章节许可，但不清除另一条用户干预产生的 hold；
-- 授权只在 `review` 下合法；
-- 清除操作只消费调用方刚读取的同一目标；
-- RunMeta 初始化时缺省模式为 `auto`，并保留已落盘的模式、许可和 hold。
+- Khi chuyển về `auto`, cần xoá giấy phép chương trong cùng một khoá ghi, nhưng không xoá hold do một can thiệp người dùng khác tạo ra;
+- Chỉ được cấp phép trong `review`;
+- Thao tác xoá chỉ được tiêu thụ đúng mục tiêu mà bên gọi vừa đọc;
+- Khi khởi tạo RunMeta, chế độ mặc định là `auto`, đồng thời giữ lại chế độ, giấy phép và hold đã ghi trên đĩa.
 
-项目当前没有需要迁移的历史数据，因此实现不包含旧字段读取、双写或降级分支。
+Hiện dự án không có dữ liệu lịch sử cần di trú, nên phần triển khai không bao gồm đọc trường cũ, ghi kép hay nhánh suy giảm.
 
-## 5. 纯函数语义
+## 5. Ngữ nghĩa hàm thuần
 
-### 5.1 正向新章识别
+### 5.1 Nhận diện chương mới theo chiều tiến lên
 
 ```go
 func StartsForwardChapter(
@@ -104,90 +104,90 @@ func StartsForwardChapter(
 ) bool
 ```
 
-只有以下条件同时成立才返回 true：
+Chỉ trả về `true` khi đồng thời thoả tất cả điều kiện sau:
 
-- Worker 是 `writer`；
-- phase 为 `writing`；
-- 没有 `PendingCommit`；
-- 没有返工队列；
-- 没有 `InProgressChapter`；
-- 目标章等于 `NextChapter()`。
+- Worker là `writer`;
+- phase là `writing`;
+- không có `PendingCommit`;
+- không có hàng đợi sửa lại;
+- không có `InProgressChapter`;
+- chương mục tiêu đúng bằng `NextChapter()`.
 
-判断只读类型化字段，不解析 Task 或 Reason 文案。
+Hàm này chỉ đọc các field đã kiểu hoá, không phân tích văn bản của Task hay Reason.
 
-### 5.2 一次性 hold
+### 5.2 Hold dùng một lần
 
-`ResolveAdvanceHold` 根据 hold 与 Progress 返回：
+`ResolveAdvanceHold` trả về theo hold và Progress:
 
-- `keep`：条件尚未满足；
-- `consume`：完本态只需清理意图；
-- `consume-and-stop`：清理意图并暂停。
+- `keep`: điều kiện chưa thoả;
+- `consume`: ở trạng thái hoàn tất chỉ cần dọn ý định;
+- `consume-and-stop`: dọn ý định rồi tạm dừng.
 
-`boundary` 在当前 Worker 边界触发；`rewrites_drained` 等返工队列排空后触发。未知条件和缺失事实直接报错。
+`boundary` được kích hoạt ở ranh giới Worker hiện tại; `rewrites_drained` được kích hoạt sau khi hàng đợi sửa lại đã rỗng. Điều kiện không hợp lệ và dữ kiện thiếu đều phải báo lỗi.
 
 ## 6. ChapterAdvanceGate
 
-Gate 是除预算外唯一的创作前进政策组件，职责只有两项：
+Gate là thành phần chính sách tiến lên sáng tác duy nhất ngoài ngân sách. Nó chỉ có hai nhiệm vụ:
 
-1. 在循环边界解析和消费一次性 hold；
-2. 在 writer 派发前检查逐章许可，并在边界对账许可是否稳定消费。
+1. Ở ranh giới vòng lặp, phân giải và tiêu thụ hold dùng một lần;
+2. Trước khi phát writer, kiểm tra giấy phép theo từng chương, rồi đối soát ở ranh giới xem giấy phép đã được tiêu thụ ổn định chưa.
 
-Engine 顺序为：
+Trình tự của Engine là:
 
 ```text
-提交待处理干预
-→ Gate 边界检查
-→ Route / 取 Arbiter 派单
+Áp dụng các can thiệp đang chờ
+→ Gate kiểm tra ranh giới
+→ Route / nhận điều phối từ Arbiter
 → precheck
-→ Gate 派发许可检查
+→ Gate kiểm tra giấy phép phát
 → Worker
-→ Budget 边界检查
-→ Gate 边界检查
-→ 下一轮
+→ Budget kiểm tra ranh giới
+→ Gate kiểm tra ranh giới
+→ vòng lặp tiếp theo
 ```
 
-`auto && hold == nil` 时，边界检查读取 RunMeta 后立即返回，不读取 Progress、PendingCommit 或 checkpoint。
+Khi `auto && hold == nil`, bước kiểm tra ranh giới sẽ đọc RunMeta rồi trả về ngay, không đọc Progress, PendingCommit hay checkpoint.
 
 ### 6.1 hold + dispatch
 
-Arbiter 可以把“重写第 3 章，改完让我看”裁成：
+Arbiter có thể rút gọn một yêu cầu kiểu “viết lại chương 3, sửa xong cho tôi xem” thành:
 
 ```json
 {
   "hold": {
     "after": "rewrites_drained",
-    "reason": "重写完成后等待用户验收"
+    "reason": "Chờ người dùng nghiệm thu sau khi viết lại xong"
   },
   "dispatch": {
     "agent": "editor",
-    "task": "复核第 3 章并按结果建立返工队列"
+    "task": "Rà soát chương 3 và tạo hàng đợi sửa lại theo kết quả"
   }
 }
 ```
 
-这组动作必须先执行配对派单，让 Editor 建立返工事实，再由 Gate 判断队列是否排空。Engine 将“本次派单延后 Gate”与该条内存指令绑定，取走指令时一并清除；普通 Arbiter 派单不能绕过 Gate。
+Hai hành động này phải được thực hiện theo cặp: trước hết phát đúng tác vụ để Editor tạo ra sự thật về sửa lại, sau đó Gate mới được quyền quyết định xem hàng đợi đã rỗng chưa. Engine sẽ gắn “lần phát này bị hoãn qua Gate” với chính lệnh trong bộ nhớ này, và xoá nó khi lấy lệnh ra; các lệnh Arbiter bình thường không được quyền bỏ qua Gate.
 
-### 6.2 permit 与返工
+### 6.2 permit và sửa lại
 
-完本 `reopen` 仅能发生在 `complete`，而 `/next` 仅能发生在 `writing`，两者机械互斥。写作期已经存在的 `PendingRewrites` 不改变最大已完成章节，因此许可仍与同一个 `NextChapter()` 对齐；返工 Worker 可运行，但不会消费正向许可。
+Lệnh `reopen` sau khi hoàn tác chỉ có thể xảy ra ở `complete`, còn `/next` chỉ có thể xảy ra ở `writing`; hai trạng thái này loại trừ lẫn nhau theo cơ học. `PendingRewrites` đã tồn tại trong giai đoạn viết không làm thay đổi chương hoàn thành lớn nhất, nên giấy phép vẫn khớp với cùng một `NextChapter()`; Worker sửa lại vẫn có thể chạy, nhưng sẽ không tiêu thụ giấy phép tiến lên.
 
-## 7. 崩溃恢复
+## 7. Khôi phục khi crash
 
-章节提交是多步 saga，许可不能用“下一次 run 可写一章”的布尔值表示。恢复时 Gate 依据三类事实对账：
+Việc submit chương là một saga nhiều bước, nên giấy phép không thể được biểu diễn bằng một cờ kiểu “lần chạy tiếp theo được viết một chương”. Khi khôi phục, Gate đối soát dựa trên ba loại sự thật:
 
-| 事实窗口 | Gate 行为 |
+| Cửa sổ sự thật | Hành vi của Gate |
 |---|---|
-| 目标章未完成、无 PendingCommit | 保留许可，允许开始/恢复该章 |
-| PendingCommit 属于目标章 | 保留许可，让提交恢复完成 |
-| 目标章完成、PendingCommit 清空、commit checkpoint 存在 | 消费许可 |
-| 目标章完成但 checkpoint 缺失 | 报错并暂停 |
-| 许可指向非 NextChapter 的未完成章 | 报错并暂停 |
+| Chương mục tiêu chưa hoàn tất, không có PendingCommit | Giữ nguyên giấy phép, cho phép bắt đầu/khôi phục chương đó |
+| PendingCommit thuộc chương mục tiêu | Giữ nguyên giấy phép, để hoàn tất việc khôi phục submit |
+| Chương mục tiêu đã hoàn tất, PendingCommit đã rỗng, và checkpoint `commit` tồn tại | Tiêu thụ giấy phép |
+| Chương mục tiêu đã hoàn tất nhưng thiếu checkpoint | Báo lỗi và tạm dừng |
+| Giấy phép trỏ tới một chương chưa hoàn tất nhưng không phải `NextChapter` | Báo lỗi và tạm dừng |
 
-因此进程在草稿、状态写入、进度标记或信号写入任一窗口崩溃，都不会把同一个许可错误用于下一章。
+Vì vậy nếu tiến trình crash trong bất kỳ cửa sổ nào của bước viết nháp, ghi trạng thái, đánh dấu tiến độ hay ghi tín hiệu, thì cùng một giấy phép sẽ không bao giờ bị dùng nhầm cho chương tiếp theo.
 
 ## 8. Arbiter
 
-干预 schema 使用 `AdvanceHoldOp`：
+Schema can thiệp dùng `AdvanceHoldOp`:
 
 ```go
 type AdvanceHoldOp struct {
@@ -197,71 +197,71 @@ type AdvanceHoldOp struct {
 }
 ```
 
-规则：
+Quy tắc:
 
-- 显式“先停一下”使用 `boundary`；
-- `auto` 下“修改已写章节，改完让我验收”使用 `rewrites_drained`；
-- `review` 已经逐章停，不重复制造同义 hold；
-- “继续”可以取消现有 hold，但不能签发章节许可；
-- 切模式只能使用 `/review on|off`，放行只能使用 `/next`。
+- Khi người dùng nói rõ “tạm dừng trước đã” thì dùng `boundary`;
+- Ở chế độ `auto`, câu “sửa lại chương đã viết, sửa xong cho tôi nghiệm thu” thì dùng `rewrites_drained`;
+- Khi đã ở `review` thì đã dừng theo từng chương rồi, không tạo thêm hold đồng nghĩa;
+- Lệnh “tiếp tục” có thể huỷ hold hiện có, nhưng không được cấp giấy phép chương;
+- Chuyển chế độ chỉ dùng `/review on|off`, còn giải phóng chỉ dùng `/next`.
 
-Engine 直接调用 RunMetaStore 应用结构化动作，不把它伪装成 LLM Tool。
+Engine gọi trực tiếp RunMetaStore để áp dụng hành động có cấu trúc, không giả lập nó thành một Tool của LLM.
 
-## 9. 用户接口
+## 9. Giao diện người dùng
 
 ### 9.1 `/review on|off`
 
-- `/review on`：立即持久化逐章验收政策；若 Worker 正在运行，当前工作完成后在下一次正向新章前停下；
-- `/review off`：切回自动推进并原子清除许可；不会隐式启动已经暂停的 Engine，事件会明确提示用户输入继续指令。
+- `/review on`: lưu ngay chính sách nghiệm thu theo từng chương; nếu Worker đang chạy, sau khi công việc hiện tại xong sẽ dừng trước chương tiến lên kế tiếp;
+- `/review off`: quay lại chế độ tự động tiến lên và xoá giấy phép một cách nguyên tử; việc này không tự khởi động lại Engine đang bị dừng, mà sẽ báo rõ cho người dùng nhập lệnh tiếp tục.
 
 ### 9.2 `/next`
 
-仅在以下条件同时成立时可用：
+Chỉ dùng được khi tất cả điều kiện sau cùng đúng:
 
-- Engine 未运行；
-- 非阶段共创；
-- 模式为 `review`；
-- 没有待处理 hold；
-- 预算允许；
-- phase 为 `writing`。
+- Engine không chạy;
+- không phải chế độ cộng tác theo giai đoạn;
+- đang ở chế độ `review`;
+- không có hold đang chờ;
+- ngân sách còn cho phép;
+- phase là `writing`.
 
-命令给 `NextChapter()` 签发精确许可并启动 Engine。通知会明确：该章提交后，必要的评审及弧/卷结构维护仍会完成，然后再次等待放行。
+Lệnh này cấp giấy phép chính xác cho `NextChapter()` rồi khởi động Engine. Thông báo sẽ nói rõ: sau khi chương này được submit xong, các bước đánh giá cần thiết và việc duy trì cấu trúc arc/volume vẫn sẽ hoàn tất, rồi hệ thống lại chờ cho phép tiếp.
 
-### 9.3 状态展示
+### 9.3 Hiển thị trạng thái
 
-`UISnapshot` 是 TUI 的唯一事实源，包含：
+`UISnapshot` là nguồn sự thật duy nhất của TUI, gồm:
 
-- `AdvanceMode`；
-- `AdvancePermitChapter`；
-- `HasAdvanceHold`；
-- `AdvanceHoldReason`。
+- `AdvanceMode`;
+- `AdvancePermitChapter`;
+- `HasAdvanceHold`;
+- `AdvanceHoldReason`.
 
-侧栏展示自动/逐章验收状态和已放行章节；等待时输入框提示“输入修改意见，或 `/next` 放行下一章”。通知 kind 为 `advance_gate`。
+Thanh bên hiển thị trạng thái tự động / nghiệm thu theo từng chương và chương đã được cho phép; khi chờ thì ô nhập hiển thị “Nhập ý kiến sửa đổi, hoặc `/next` để cho phép chương tiếp theo”. Loại thông báo là `advance_gate`.
 
-## 10. 验证
+## 10. Kiểm chứng
 
-测试覆盖：
+Các test cần bao phủ:
 
-- RunMeta 模式、许可、hold 的原子状态转换与 compare-and-clear；
-- 未知模式显式失败且不改写 RunMeta；
-- 正向新章与返工/恢复的纯函数识别；
-- hold 的 boundary、返工未排空、返工排空与完本语义；
-- 无许可阻断、精确许可放行、错章许可报错；
-- PendingCommit 期间许可保留，稳定 commit 后消费；
-- 完成标记与 checkpoint 冲突时暂停；
-- permit 与 PendingRewrites 交错不误报；
-- Engine 端到端证明一个许可恰好只稳定一个新章节；
-- Gate 已标记暂停但旧 Engine goroutine 尚在退出时，`/next` 明确拒绝重入，稍后重试按同章许可幂等恢复；
-- hold-only、hold+dispatch 和退出竞态回归。
+- Chuyển trạng thái nguyên tử của RunMeta cho mode, giấy phép và hold, cùng compare-and-clear;
+- Chế độ không hợp lệ phải thất bại rõ ràng và không ghi đè RunMeta;
+- Nhận diện hàm thuần cho chương tiến lên, sửa lại và khôi phục;
+- Ngữ nghĩa hold cho `boundary`, hàng đợi sửa lại chưa rỗng, hàng đợi sửa lại đã rỗng và trạng thái hoàn tất;
+- Chặn khi không có giấy phép, cho qua khi có giấy phép chính xác, báo lỗi khi lệch chương;
+- Trong lúc PendingCommit còn tồn tại thì giấy phép phải được giữ lại, và chỉ tiêu thụ sau khi commit ổn định;
+- Khi completion marker và checkpoint xung đột phải tạm dừng;
+- Khi permit xen kẽ với PendingRewrites thì không báo nhầm;
+- Chứng minh end-to-end rằng một giấy phép chỉ ổn định đúng một chương mới;
+- Khi Gate đã đánh dấu dừng nhưng goroutine cũ của Engine vẫn đang thoát ra, `/next` phải từ chối vào lại rõ ràng, và thử lại sau đó sẽ khôi phục idempotent theo cùng một giấy phép chương;
+- Hồi quy cho hold-only, hold+dispatch và các cuộc đua lúc thoát.
 
-## 11. 明确不做
+## 11. Những gì cố ý không làm
 
-- 不让模型决定运行模式或签发许可；
-- 不修改 Route 以适配用户确认策略；
-- 不把返工、规划、评审和结构维护都变成逐步确认；
-- 不增加通用 PolicyEngine、StopCondition 列表或策略 DSL；
-- 不提供预授权多章或许可队列；
-- 不保留旧暂停模型、兼容字段、迁移 DTO 或双写链路；
-- 不为未知未来模式静默降级。
+- Không để model quyết định mode chạy hoặc tự cấp giấy phép;
+- Không chỉnh Route để phục vụ chính sách xác nhận của người dùng;
+- Không biến sửa lại, lập kế hoạch, đánh giá và duy trì cấu trúc thành một chuỗi xác nhận từng bước;
+- Không thêm PolicyEngine tổng quát, danh sách StopCondition hay DSL cho chính sách;
+- Không hỗ trợ cấp phép sẵn cho nhiều chương hoặc hàng đợi giấy phép;
+- Không giữ lại mô hình tạm dừng cũ, field tương thích, DTO di trú hay đường ghi kép;
+- Không tự âm thầm suy giảm cho một mode tương lai chưa biết.
 
-未来若出现新的、重复验证的自治边界需求，再基于证据扩展模式；当前低反悔成本就是未来兼容性。
+Nếu sau này xuất hiện nhu cầu mới về ranh giới tự chủ đã được kiểm chứng lặp lại, khi đó sẽ mở rộng mode dựa trên bằng chứng; còn hiện tại, chi phí hối hận thấp chính là khả năng tương thích trong tương lai.

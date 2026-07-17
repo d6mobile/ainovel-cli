@@ -41,7 +41,7 @@ Sắp xếp theo "đường chẩn đoán phổ biến nhất khi xảy ra sự 
 
 ## 3. Quan sát chỉ nam (compass)
 
-**Thời gian sửa**: 2026-05-08 (commit `fix: update_compass 工具自动填 last_updated`)
+**Thời gian sửa**: 2026-05-08 (commit `fix: update_compass tự động ghi last_updated`)
 
 ### Xem gì
 
@@ -74,7 +74,7 @@ So sánh trước và sau khi chạy tiểu thuyết dài:
 
 ## 4. Quan sát danh sách diễn viên phụ (cast_ledger)
 
-**Tính năng triển khai**: 2026-05-08 (commit `feat: 新增配角名册自动追踪次要角色`)
+**Tính năng triển khai**: 2026-05-08 (commit `feat: thêm sổ tên phụ để tự theo dõi vai phụ`)
 
 ### Xem gì
 

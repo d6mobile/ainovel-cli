@@ -239,11 +239,11 @@ Bộ đếm turn của agent phụ là độc lập (nguyên gốc agentcore), k
 
 Các agent phụ không giao tiếp trực tiếp, mọi luồng thông tin đều đi qua artifact có cấu trúc trong Store. Ba chế độ bao phủ toàn bộ workflow của hệ thống:
 
-**Chế độ A · Bàn giao tuần tự (nhánh chính)**: Điều phối viên → Kiến trúc sư lập kế hoạch → Người viết chương 1..N → Biên tập viên đánh giá cuối cung → Người viết viết lại. Chế độ phổ biến nhất, Điều phối viên dùng `novel_context` tra trạng thái hiện tại để quyết định gọi ai tiếp theo.
+**Chế độ A · Bàn giao tuần tự (nhánh chính)**: Điều phối viên → Kiến trúc sư lập kế hoạch → Người viết chương 1..N → Biên tập viên đánh giá cuối cung → Người viết viết lại. Đây là chế độ phổ biến nhất; Điều phối viên dùng `novel_context` để tra trạng thái hiện tại và quyết định gọi ai tiếp theo.
 
-**Chế độ B · Phản hồi đánh giá (vòng kín)**: Người viết phát hiện đề cương lệch trong bản nháp → Giá trị trả về của `commit_chapter` mang field `writer_feedback` → Điều phối viên thấy phản hồi phán quyết có nên nâng cấp thành lời gọi architect để điều chỉnh đề cương. Người viết không gọi trực tiếp Kiến trúc sư, phản hồi được gửi về Điều phối viên qua field có cấu trúc.
+**Chế độ B · Phản hồi đánh giá (vòng kín)**: Người viết phát hiện đề cương lệch trong bản nháp → giá trị trả về của `commit_chapter` có field `writer_feedback` → Điều phối viên xem phản hồi để quyết định có nên nâng cấp thành lời gọi architect nhằm điều chỉnh đề cương. Người viết không gọi trực tiếp Kiến trúc sư; phản hồi được gửi về Điều phối viên qua field có cấu trúc.
 
-**Chế độ C · Mở rộng khung xương (kế hoạch cuộn)**: `commit_chapter` phát hiện cung tiếp theo vẫn là khung xương → trả về `arc_end_reached + next_skeleton_arc` → Flow Router phát chỉ thị → Điều phối viên gọi architect_long mở rộng các chương chi tiết của cung tiếp theo → Người viết tiếp tục. Khả năng "kế hoạch cuộn" tiểu thuyết dài chính là vòng kín này.
+**Chế độ C · Mở rộng khung xương (kế hoạch cuộn)**: `commit_chapter` phát hiện cung tiếp theo vẫn là khung xương → trả về `arc_end_reached + next_skeleton_arc` → Flow Router phát chỉ thị → Điều phối viên gọi `architect_long` mở rộng các chương chi tiết của cung tiếp theo → Người viết tiếp tục. Khả năng "kế hoạch cuộn" của tiểu thuyết dài chính là vòng kín này.
 
 ### 6.4 Ràng buộc code của quy trình agent phụ (không dựa vào nạng prompt)
 
@@ -432,7 +432,7 @@ assets/
 | 2026-05-02 | agentcore `WithMaxToolErrors(0)` + `isReasoningOnlyStopAssistant`; `StreamIdleTimeout=5min`; xóa patch tiếp tục chạy `idleResumeCount` | mimo / streaming suy nghĩ chậm chạy thông |
 | 2026-06-05 | Vòng kín kế hoạch cuộn (`expand_arc`/`append_volume`) + `/import` phân tích ngược phân tầng tiếp tục viết + can thiệp độ dài người dùng | 200+ chương chạy thông lần đầu |
 
-Thực đo: hy3-preview free 12 chương / 73 phút, mimo-v2.5-pro 10 chương / 84.000 chữ (trung bình chương 8400), đều chạy xong một lần; tiểu thuyết dài gpt-5.4 《凡骨》 235 chương / 1.270.000 chữ / trung bình chương 5407, vòng kín kế hoạch cuộn chạy thông.
+Thực đo: hy3-preview free 12 chương / 73 phút, mimo-v2.5-pro 10 chương / 84.000 chữ (trung bình chương 8400), đều chạy xong một lần; tiểu thuyết dài gpt-5.4 “Phàm Cốt” 235 chương / 1.270.000 chữ / trung bình chương 5407, vòng kín kế hoạch cuộn chạy thông.
 
 ---
 

@@ -411,7 +411,7 @@ Tại sao cần cả hai:
 - `FullSummary` dù tốt đến đâu cũng có thể bỏ sót thông tin chính xác trong Store
 - Vì vậy restore pack là lớp bảo hiểm cuối cùng
 
-Hiện tại cả hai đã dùng chung `store_summary_builder.go`, tránh sự phân kỳ về khẩu径.
+Hiện tại cả hai đã dùng chung `store_summary_builder.go`, tránh sự phân kỳ về cách diễn giải.
 
 ## 7. Vai trò của novel_context
 
@@ -645,7 +645,7 @@ Xem trước:
 1. Không nhét logic nghiệp vụ tiểu thuyết vào `agentcore`
 2. Ưu tiên dựa vào Store có cấu trúc, không phải lịch sử chat
 3. Người viết dùng prompt tóm tắt tiểu thuyết chuyên biệt
-4. Nén và khôi phục dùng chung builder nhất có thể, tránh phân kỳ khẩu径
+4. Nén và khôi phục dùng chung builder nhất có thể, tránh phân kỳ về cách diễn giải
 
 ### Các giới hạn hiện tại vẫn cố ý giữ lại
 
@@ -665,5 +665,5 @@ Quản lý ngữ cảnh của dự án này không đơn giản là "nén hội 
 Nếu bạn muốn thay đổi hệ thống này sau này, hãy ưu tiên giữ ba điều sau:
 
 1. Không để bộ nhớ quan trọng của Người viết lại chỉ phụ thuộc vào lịch sử chat.
-2. Không để `store_summary` và `writer_restore` phân kỳ khẩu径.
+2. Không để `store_summary` và `writer_restore` phân kỳ về cách diễn giải.
 3. Khi xuất hiện vấn đề về tính liên tục, trước tiên kiểm tra xem sản phẩm có cấu trúc có đi vào ngữ cảnh không, rồi mới quyết định có cần sửa prompt không.
