@@ -104,8 +104,8 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 		die("error: không còn hỗ trợ truyền yêu cầu tiểu thuyết trực tiếp qua dòng lệnh; hãy nhập trong ô TUI sau khi khởi động")
 	}
 
-	// FillDefaults :OutputDir ,Mặc định——
-	// Mặc định <>/style/ 。
+	// FillDefaults bổ sung OutputDir mặc định trước khi tải assets.
+	// Nếu chưa cấu hình, thư mục mặc định sẽ phụ thuộc vào style hiện tại.
 	cfg.FillDefaults()
 	bundle := assets.Load(cfg.Style, assets.DefaultLoadOptions(cfg.OutputDir))
 	if opts.Headless {
