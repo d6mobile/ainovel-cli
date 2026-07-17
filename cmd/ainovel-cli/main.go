@@ -21,11 +21,11 @@ var (
 	date    = "unknown"
 )
 
-// headlessMode  khởi động headless， die 。
+// headlessMode đánh dấu việc đang chạy ở chế độ headless.
 var headlessMode bool
 
 func main() {
-	//  flag ：eval  harness，。
+	// Lối vào cho lệnh eval.
 	if len(os.Args) > 1 && os.Args[1] == "eval" {
 		os.Exit(eval.Command(os.Args[2:]))
 	}
@@ -47,7 +47,7 @@ func main() {
 	}
 	headlessMode = opts.Headless
 
-	//
+	// Kiểm tra xem đã cần chạy wizard thiết lập lần đầu hay chưa.
 	if bootstrap.NeedsSetup() {
 		if opts.Headless {
 			die("error: chế độ headless không hỗ trợ thiết lập lần đầu; hãy chạy TUI một lần để hoàn tất cấu hình")
@@ -56,12 +56,12 @@ func main() {
 		if err != nil {
 			die("setup: %v", err)
 		}
-		// Hoàn tất
+		// Chạy tiếp bằng cấu hình vừa thiết lập.
 		runWithConfig(setupCfg, opts, args)
 		return
 	}
 
-	//
+	// Tải cấu hình đã lưu.
 	cfg, err := bootstrap.LoadConfig()
 	if err != nil {
 		die("config: %v", err)
@@ -70,9 +70,8 @@ func main() {
 	runWithConfig(cfg, opts, args)
 }
 
-// die ： stderr、 ~/.ainovel/last-error.log，
-// （ headless）Chờ——
-// Tắt，， issue #37 。
+// die ghi lỗi ra stderr và lưu bản ghi vào ~/.ainovel/last-error.log.
+// Nếu không chạy headless và stdin là terminal, chờ người dùng nhấn Enter trước khi thoát.
 func die(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Fprintln(os.Stderr, msg)
@@ -86,9 +85,9 @@ func die(format string, args ...any) {
 	os.Exit(1)
 }
 
-// stdinIsTerminal Đầu vào（x）。 /
+// stdinIsTerminal báo stdin có phải là terminal tương tác hay không.
 //
-//	true；、、CI  false。，。
+// Trả về true khi chạy trong terminal; false trong pipeline, CI hoặc khi bị redirect.
 func stdinIsTerminal() bool {
 	fi, err := os.Stdin.Stat()
 	if err != nil {
@@ -135,7 +134,7 @@ type cliOptions struct {
 	UpdateVersion string
 }
 
-// parseCLIOptions  CLI flag，。
+// parseCLIOptions phân tích các cờ CLI và tham số đi kèm.
 func parseCLIOptions(argv []string) (cliOptions, []string, error) {
 	var opts cliOptions
 	var args []string
