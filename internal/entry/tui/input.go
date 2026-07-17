@@ -8,22 +8,22 @@ import (
 	"github.com/voocel/ainovel-cli/internal/host"
 )
 
-// renderInputBox 渲染底部输入区：输入框、快捷键提示行、最底部用量状态栏。
-// 输入框单独负责输入与提示，不承载启动模式栏。
+// renderInputBox Đầu vào：Đầu vào、、Mức dùng。
+// Đầu vàoĐầu vào，。
 func renderInputBox(inputView, hints string, snap host.UISnapshot, outputDir string, width int) string {
 	innerW := width - 4 // border + padding
 	if innerW < 12 {
 		innerW = 12
 	}
 
-	// 输入行：提示符 + 输入框
+	// Đầu vào dòng:  + Đầu vào
 	prompt := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render("❯ ")
 	inputLine := prompt + inputView
 
-	// 提示行：快捷键独占整行——模型/花费等运行信息移入底部状态栏，不再挤在右侧互相截断。
+	//  dòng: ——Mô hình/，。
 	line2 := fitInlineLine(hints, innerW)
 
-	// 输入区（单一盒子，避免视觉上出现双输入框）
+	// Đầu vào（，Đầu vào）
 	inputStyle := lipgloss.NewStyle().
 		Width(width).
 		Border(baseBorder, true, false, true, false).
@@ -31,13 +31,13 @@ func renderInputBox(inputView, hints string, snap host.UISnapshot, outputDir str
 		Padding(0, 1)
 	inputBlock := inputStyle.Render(inputLine)
 
-	// 提示行（无边框，紧贴下横线下方）
+	// （，）
 	hintStyle := lipgloss.NewStyle().
 		Width(width).
 		Padding(0, 2)
 	hintBlock := hintStyle.Render(line2)
 
-	// 状态栏占用输入区原有的末尾空行：整块高度不变，layoutHeights 无需调整。
+	// Đầu vào dòng: Cao，layoutHeights 。
 	statusBlock := hintStyle.Render(renderStatusBar(snap, outputDir, innerW))
 
 	return inputBlock + "\n" + hintBlock + "\n" + statusBlock

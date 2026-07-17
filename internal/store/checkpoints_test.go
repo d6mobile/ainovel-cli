@@ -190,15 +190,18 @@ func TestCheckpointStore_SeqNotConsumedOnWriteFailure(t *testing.T) {
 		t.Fatalf("seed append: %v", err)
 	}
 
-	// Đổi file jsonl thành chỉ đọc để lần OpenFile tiếp theo bị lỗi ghi
+	// Replace the jsonl file with a directory so the next OpenFile fails consistently,
+	// even when tests run as root inside Docker (chmod-only readonly files are still writable there).
 	jsonlPath := filepath.Join(dir, checkpointsFile)
-	if err := os.Chmod(jsonlPath, 0o444); err != nil {
-		t.Skipf("chmod readonly not supported: %v", err)
+	if err := os.Remove(jsonlPath); err != nil {
+		t.Fatalf("remove jsonl: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(jsonlPath, 0o644) })
+	if err := os.Mkdir(jsonlPath, 0o755); err != nil {
+		t.Fatalf("mkdir jsonl path: %v", err)
+	}
 
 	if _, err := cs.Append(domain.ChapterScope(2), "plan", "p", "sha256:2"); err == nil {
-		t.Fatal("expected write failure on readonly file")
+		t.Fatal("expected write failure when jsonl path is a directory")
 	}
 
 	// cache không nên bị ô nhiễm
@@ -206,9 +209,9 @@ func TestCheckpointStore_SeqNotConsumedOnWriteFailure(t *testing.T) {
 		t.Fatalf("cache leaked failed entry, len=%d", len(all))
 	}
 
-	// Khôi phục quyền ghi, thử lại phải nhận seq=2 chứ không phải seq=3
-	if err := os.Chmod(jsonlPath, 0o644); err != nil {
-		t.Fatalf("restore chmod: %v", err)
+	// Restore a writable path; retry should receive seq=2 rather than seq=3.
+	if err := os.Remove(jsonlPath); err != nil {
+		t.Fatalf("remove jsonl directory: %v", err)
 	}
 	cp, err := cs.Append(domain.ChapterScope(2), "plan", "p", "sha256:2")
 	if err != nil {

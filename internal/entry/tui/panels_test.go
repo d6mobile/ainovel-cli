@@ -13,15 +13,15 @@ func TestRenderTopBarShowsVersion(t *testing.T) {
 	out := renderTopBar(host.UISnapshot{
 		Provider:  "openrouter",
 		ModelName: "test-model",
-		NovelName: "测试小说",
+		NovelName: "Tiểu thuyết kiểm thử",
 	}, 120, "", "v1.2.3")
 	if !strings.Contains(out, "ainovel-cli v1.2.3") {
 		t.Fatalf("top bar missing version: %q", out)
 	}
 }
 
-// TestRenderStatusBar 守护底部状态栏的信息契约：模型身份（窗口+思考）、会话令牌、
-// 花费/预算、书目录都必须在（样式剥离后按纯文本断言）。
+// TestRenderStatusBar guards the bottom status bar contract: model identity (window + thinking), session tokens,
+// spending/budget, and book contents must all be present (asserted as plain text after stripping styles).
 func TestRenderStatusBar(t *testing.T) {
 	out := ansi.Strip(renderStatusBar(host.UISnapshot{
 		Provider:           "openrouter",
@@ -34,9 +34,9 @@ func TestRenderStatusBar(t *testing.T) {
 		BudgetLimitUSD:     5,
 		TotalSavedUSD:      0.12,
 	}, "/tmp/output", 120))
-	for _, want := range []string{"test-model(200K,med)", "↑1.2M", "↓89.3k", "$0.31/$5.00", "省$0.12", "./output"} {
+	for _, want := range []string{"test-model(200K,med)", "↑1.2M", "↓89.3k", "$0.31/$5.00", "tiết kiệm $0.12", "./output"} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("状态栏缺少 %q：%q", want, out)
+			t.Fatalf("status bar thiếu %q: %q", want, out)
 		}
 	}
 }
@@ -47,10 +47,10 @@ func TestRenderStatusBarAutoThinkingAndEmpty(t *testing.T) {
 		ModelContextWindow: 128000,
 	}, "", 120))
 	if !strings.Contains(out, "test-model(128K,auto)") {
-		t.Fatalf("缺思考等级 auto 括注：%q", out)
+		t.Fatalf("thiếu chú thích auto cho mức thinking: %q", out)
 	}
 	if out := ansi.Strip(renderStatusBar(host.UISnapshot{}, "", 120)); out != "READY" {
-		t.Fatalf("空快照应回退 READY，得 %q", out)
+		t.Fatalf("snapshot rỗng phải fallback READY, got %q", out)
 	}
 }
 
@@ -62,40 +62,40 @@ func TestRenderUsageLineSeparatesFullWidthNameAndTokens(t *testing.T) {
 }
 
 func TestTruncateByDisplayWidth(t *testing.T) {
-	// 纯中文按视觉宽度截：10 列预算 = 3 个汉字(6列) + "..."(3列)，按 rune 截会溢出到 17 列
-	got := truncate("临港市公共算法伦理审计员", 10)
+	// Pure Chinese text should be truncated by display width: a 10-column budget = 3 CJK chars (6 columns) + "..." (3 columns), and rune-based truncation would overflow to 17 columns
+	got := truncate("kiểm toán viên đạo đức thuật toán công tại Lâm Cảng", 10)
 	if w := lipgloss.Width(got); w > 10 {
-		t.Errorf("truncate 溢出列宽: %d > 10 (%q)", w, got)
+		t.Errorf("truncate vượt độ rộng cột: %d > 10 (%q)", w, got)
 	}
 	if !strings.HasSuffix(got, "...") {
-		t.Errorf("超宽截断应带省略号: %q", got)
+		t.Errorf("cắt chuỗi quá rộng phải có dấu ba chấm: %q", got)
 	}
-	// ASCII 行为与旧实现一致
+	// ASCII behavior stays the same as the old implementation
 	if got := truncate("abcdef", 6); got != "abcdef" {
-		t.Errorf("未超宽不应截断: %q", got)
+		t.Errorf("không quá rộng thì không được cắt: %q", got)
 	}
 	if got := truncate("abcdefgh", 6); got != "abc..." {
-		t.Errorf("ASCII 截断: got %q want %q", got, "abc...")
+		t.Errorf("cắt ASCII: got %q want %q", got, "abc...")
 	}
 }
 
 func TestRenderDetailContentWrapsCJK(t *testing.T) {
-	long := "沈砚（主角；临港市公共算法伦理审计员，台风夜事故的调查负责人，坚持程序正义）"
+	long := "Thẩm Nghiên (nhân vật chính; kiểm toán viên đạo đức thuật toán công tại Lâm Cảng, phụ trách điều tra sự cố đêm bão, kiên trì công lý thủ tục)"
 	const contentW = 40
 	out := renderDetailContent(host.UISnapshot{
 		Characters:       []string{long},
 		SupportingCount:  1,
 		RecentSupporting: []string{long},
-		RecentSummaries:  []string{"第6章：" + long},
+		RecentSummaries:  []string{"Chương 6: " + long},
 	}, contentW)
 	for line := range strings.SplitSeq(out, "\n") {
 		if w := lipgloss.Width(line); w > contentW {
-			t.Errorf("行溢出面板宽度: %d > %d (%q)", w, contentW, line)
+			t.Errorf("dòng tràn chiều rộng panel: %d > %d (%q)", w, contentW, line)
 		}
 	}
-	// 长描述应折成多行（悬挂缩进续行），而不是截断丢信息
+	// Long descriptions should wrap to multiple lines with hanging indentation, not be truncated and lose information
 	joined := strings.ReplaceAll(strings.ReplaceAll(out, "\n", ""), " ", "")
-	if !strings.Contains(joined, "坚持程序正义") {
-		t.Errorf("折行后应保留完整描述，实际输出:\n%s", out)
+	if !strings.Contains(joined, strings.ReplaceAll("kiên trì công lý thủ tục", " ", "")) {
+		t.Errorf("sau khi xuống dòng phải giữ mô tả đầy đủ, output thực tế:\n%s", out)
 	}
 }

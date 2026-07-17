@@ -129,16 +129,16 @@ func TestLoad_BookOverridesHomeOnStyles(t *testing.T) {
 // TestOverrideVoice_SharesAssemblyPath eval 的 voice A/B 与生产同组装路径(验收标准 ④)。
 func TestOverrideVoice_SharesAssemblyPath(t *testing.T) {
 	b := Load("default", LoadOptions{})
-	b.OverrideVoice("## 实验文风\n\n- 一句话")
+	b.OverrideVoice("## Văn phong thử nghiệm\n\n- Một câu")
 	got := BuildWriterPrompt(b.Prompts.Writer, b.Voice, "")
-	if !strings.Contains(got, "## 实验文风") {
-		t.Fatal("OverrideVoice 未生效")
+	if !strings.Contains(got, "## Văn phong thử nghiệm") {
+		t.Fatal("OverrideVoice chưa có hiệu lực")
 	}
 	if strings.Contains(got, voicePlaceholder) {
 		t.Fatal("占位符必须被消耗")
 	}
-	// 协议部分不受 voice 覆盖影响
-	if !strings.Contains(got, "## 执行协议") {
-		t.Fatal("协议模板不得被 voice 覆盖破坏")
+	// Protocol section is not affected by voice override.
+	if !strings.Contains(got, "## Giao thức thực thi") {
+		t.Fatal("template giao thức không được bị voice override phá hỏng")
 	}
 }

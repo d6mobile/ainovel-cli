@@ -2,8 +2,8 @@
   "id": "writer_first_chapter",
   "category": "smoke",
   "role": "writer",
-  "description": "Writer 能完成第一章 plan→draft→commit 并落盘，工具链稳定。",
-  "prompt": "写一个短篇修仙小说，主角是边城药铺的杂役少年，靠一手辨药的本事卷入一桩失踪案。",
+  "description": "Writer có thể hoàn tất chương 1 theo luồng plan→draft→commit và ghi ra đĩa, chứng minh toolchain ổn định.",
+  "prompt": "Viết một truyện ngắn tu tiên, nhân vật chính là thiếu niên tạp dịch ở hiệu thuốc vùng biên, nhờ tài phân biệt dược liệu mà bị cuốn vào một vụ mất tích.",
   "max_chapters": 1,
   "target_prompts": ["writer.md"],
   "expect": {

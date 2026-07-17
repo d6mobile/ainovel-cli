@@ -214,7 +214,7 @@ func TestBuildStoryStateSummary_Populated(t *testing.T) {
 	}
 
 	got := buildStoryStateSummary(st)
-	for _, want := range []string{"影之诗", "已完成 3 章", "下一章为第 4 章", "主角登临绝巅", "师门血仇未报", "预计 4-6 卷"} {
+	for _, want := range []string{"影之诗", "Đã hoàn thành 3 chương", "chương tiếp theo là chương 4", "主角登临绝巅", "师门血仇未报", "预计 4-6 卷"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("摘要应含 %q，实际:\n%s", want, got)
 		}

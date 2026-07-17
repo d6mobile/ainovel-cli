@@ -15,8 +15,8 @@ import (
 const maxPromptEventCols = 160
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// body 高度依赖顶栏/底栏的实时高度（新建页模式栏、多行输入都会改变它），
-	// 每条消息前同步一次，避免 viewport 停在旧高度、面板底部补空行。幂等且廉价。
+	// body height depends on the live top/bottom bar height (new-page mode bar and multiline input can both change it),
+	// we sync it before every message so the viewport does not stick to an old height and leave blank space at the bottom; this is idempotent and cheap.
 	if m.width > 0 {
 		m.updateViewportSize()
 	}
@@ -94,8 +94,8 @@ func (m Model) handleBlockingModalKey(msg tea.KeyMsg, next func(tea.KeyMsg) (tea
 		return m, tea.Tick(time.Second, func(time.Time) tea.Msg { return quitResetMsg{} }), true
 	}
 	m.quitPending = false
-	// 跨模态全局快捷键：modal 打开期间也要能切鼠标上报，否则共创/help/report 等
-	// 锁屏式 modal 下用户无法用原生拖拽选中复制。
+	// Global cross-modal shortcut: mouse reporting must still toggle while a modal is open, otherwise co-create/help/report, etc.
+	// In a lock-screen modal, the user cannot use native drag selection to copy.
 	if msg.Type == tea.KeyCtrlR {
 		next, cmd := m.toggleMouseReporting()
 		return next, cmd, true
@@ -104,11 +104,11 @@ func (m Model) handleBlockingModalKey(msg tea.KeyMsg, next func(tea.KeyMsg) (tea
 	return model, cmd, true
 }
 
-// toggleMouseReporting 切换鼠标上报开关。开 → 关让用户原生拖拽选中复制；
-// 关 → 开恢复点击切焦点 / 滚轮。base 路径与 blocking modal 路径共用。
+// toggleMouseReporting toggles mouse reporting. Off -> on lets the user copy with native drag selection;
+// on -> off restores click-to-focus / wheel behavior. The base path and blocking-modal path share this code.
 func (m Model) toggleMouseReporting() (Model, tea.Cmd) {
-	// 欢迎页(modeNew)本就不开鼠标上报，原生拖拽即可复制；此处忽略 Ctrl+R，
-	// 避免误开上报反而破坏原生复制。鼠标上报由 enterRunning 在进入工作台时打开。
+	// The welcome page (modeNew) already keeps mouse reporting off, so native drag selection can copy; ignore Ctrl+R here,
+	// to avoid accidentally enabling reporting and breaking native copy. Mouse reporting is enabled by enterRunning when entering the workbench.
 	if m.mode == modeNew {
 		return m, nil
 	}
@@ -119,11 +119,11 @@ func (m Model) toggleMouseReporting() (Model, tea.Cmd) {
 	return m, tea.EnableMouseCellMotion
 }
 
-// donePlaceholder 完成态输入框提示：会话内完结（doneMsg）与重启进完结书（bootstrap）共用。
-const donePlaceholder = "创作已完成 · 可输入返工要求(如\"重写第3章\")、/reopen 续写新卷、/export 导出"
+// donePlaceholder is the input placeholder for the done state: it is shared by in-session completion (doneMsg) and restarting a completed book (bootstrap).
+const donePlaceholder = "Sáng tác đã hoàn thành · Có thể nhập yêu cầu làm lại (ví dụ \"viết lại chương 3\"), /reopen viết tiếp quyển mới, /export xuất"
 
-// enterRunning 进入创作工作台：开启鼠标上报（工作台需要点击切面板 / 滚轮 /
-// 拖拽侧边栏）。返回的命令需由调用方 Batch 进最终返回值。
+// enterRunning enters the creative workbench: it enables mouse reporting (the workbench needs click-to-switch panels / wheel scrolling /
+// dragging the sidebar). The caller must Batch the returned command into the final result.
 func (m *Model) enterRunning() tea.Cmd {
 	m.mode = modeRunning
 	m.mouseOff = false
@@ -169,10 +169,10 @@ func (m Model) handleCommandPaletteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool
 }
 
 func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// 节流防御：粘贴 \n 在不支持 bracketed paste 的终端会退化成连续 KeyEnter；
-	// 真人按 Enter 与前一字符间隔通常 > 100ms，<50ms 极可能是粘贴流残片。
-	// 只记 KeyRunes（字符流）—— 功能键（↑↓/Tab/Ctrl-x）不应污染节流，
-	// 否则用户翻历史选定后立刻按 Enter 会被误吞。
+	// Throttle defense: pasted \\n in a terminal without bracketed paste degrades into a stream of KeyEnter events;
+	// a real Enter key press is usually more than 100ms after the previous character; under 50ms is very likely a paste fragment.
+	// Only KeyRunes (character input) count — function keys (↑↓/Tab/Ctrl-x) should not affect throttling,
+	// otherwise Enter right after browsing history could be swallowed.
 	if msg.Type == tea.KeyRunes {
 		m.lastKeyAt = time.Now()
 	}
@@ -191,7 +191,7 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.resetOutputPanels()
 		return m, nil
 	case tea.KeyCtrlU:
-		// 清空当前输入；同时退出历史浏览态。
+		// Clear the current input and exit history browsing.
 		m.textarea.Reset()
 		m.historyIdx = len(m.inputHistory)
 		m.historyDraft = ""
@@ -216,13 +216,13 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focusPane = (m.focusPane + 1) % focusPaneCount
 		return m, nil
 	case tea.KeyEnter:
-		// Alt+Enter 是主动换行，让 textarea.Update 接管（KeyMap.InsertNewline 已绑到此键）。
+		// Alt+Enter inserts a line break on purpose and lets textarea.Update handle it (KeyMap.InsertNewline is already bound to this key).
 		if msg.Alt {
 			break
 		}
-		// 与上一次非 Enter 按键间隔过短 → 视为粘贴流的 \n 残片：
-		// 替换为空格保留视觉间隔，与 cleanHumanKeyRunes 路径语义一致（"abc\ndef" → "abc def"）。
-		// 防御 bracketed paste 失效的终端环境（旧 SSH/某些 tmux 配置）。
+		// If the gap from the previous non-Enter key is too short, treat it as a pasted \n fragment:
+		// replace it with a space to preserve visual spacing, matching cleanHumanKeyRunes semantics ("abc\ndef" -> "abc def").
+		// Defend against terminal environments where bracketed paste fails (old SSH / some tmux configs).
 		if !m.lastKeyAt.IsZero() && time.Since(m.lastKeyAt) < 50*time.Millisecond {
 			var cmd tea.Cmd
 			m.textarea, cmd = m.textarea.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
@@ -231,11 +231,11 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleEnterKey()
 	case tea.KeyUp:
-		// 多行输入：让 textarea 接管光标行内移动（落到 switch 后的 textarea.Update）
+		// Multiline input: let textarea handle cursor movement within the line (handled by textarea.Update after the switch).
 		if m.textareaIsMultiline() {
 			break
 		}
-		// 单行：优先翻历史，没有可用历史时回退到事件流滚动
+		// Single line: prefer history navigation; if no history is available, fall back to event-stream scrolling.
 		if m.tryHistoryUp() {
 			return m, nil
 		}
@@ -319,17 +319,17 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		m.cocreate = newCoCreateState(text)
 		return m, m.sendCoCreate()
 	case modeRunning:
-		// 不本地回显 USER 事件 —— Host.Continue/Steer 入口已 emit "USER" 事件，
-		// 走 events channel 回流到 TUI。架构 §2.3：观察层只观察，不产生事实。
+		// Do not locally echo USER events — the Host.Continue/Steer entry points already emit "USER" events,
+		// and they flow back into the TUI through the events channel. Architecture §2.3: the observation layer only observes; it does not create facts.
 		if !m.snapshot.IsRunning {
 			return m, continueRuntime(m.runtime, text)
 		}
 		return m, steerRuntime(m.runtime, text)
 	case modeDone:
-		// 完结后用户输入（返工/续写诉求）：唤醒新一轮 run。Continue 在停机态走 Inject
-		// 自动恢复，Arbiter 裁定用户干预；返工已写章时由 Engine 重开全书并入队。
-		// 切回 modeRunning 重入工作台；本轮跑完
-		// doneMsg(complete) 会再置 modeDone。斜杠命令已在上面提前处理，不经此分支。
+		// After completion, user input (rewrite / continue requests) wakes a new run. Continue uses Inject while the engine is stopped
+		// to auto-resume; Arbiter decides on user intervention; when rewriting already-written chapters, the Engine restarts the book and queues it.
+		// Switch back to modeRunning and re-enter the workbench; when this round finishes,
+		// doneMsg(complete) will set modeDone again. Slash commands are handled above and do not reach this branch.
 		m.mode = modeRunning
 		return m, continueRuntime(m.runtime, text)
 	default:
@@ -372,9 +372,9 @@ func (m Model) handleVerticalScrollKey(msg tea.KeyMsg, upward bool) (tea.Model, 
 
 func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.cocreate != nil {
-		// 鼠标按 X 坐标分流：屏幕左半 = conv 面板，右半 = prompt 面板。
-		// modal 居中且 conv 占左 ~58%，用屏幕中线判别足够准确。
-		// 用户在 conv 区滚轮自动停止 follow（让其能稳定停在某个历史位置）。
+		// Route mouse events by X coordinate: the left half of the screen is the conv panel, the right half is the prompt panel.
+		// The modal is centered and conv takes about 58% of the left side, so using the screen midpoint is accurate enough.
+		// Scrolling the wheel in the conv area automatically stops follow so the user can keep the view stable on a specific history position.
 		var cmd tea.Cmd
 		if msg.X < m.width/2 {
 			m.cocreate.convFollow = false
@@ -431,22 +431,22 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		m.refreshEventViewport()
 		return m, listenEvents(m.runtime), true
 	case bootstrapMsg:
-		// 先回放历史事件再处理错误：Resume 被拒（如预算上限）是常规路径，
-		// 用户需要在看得到历史的前提下读到拒绝原因，而不是面对空白事件流。
+		// Replay historical events before handling errors: a rejected Resume (for example due to budget limits) is the normal path,
+		// and the user needs to see the rejection reason with the history still visible, not an empty event stream.
 		m.applyRuntimeReplay(msg.replay)
 		if msg.err != nil {
 			m.err = msg.err
 			return m, fetchSnapshot(m.runtime), true
 		}
-		// modeNew：启动恢复/导入完成落台；modeDone：/reopen 重开后回到创作台。
+		// modeNew: bootstrap resume / import completion lands here; modeDone: /reopen returns to the creative workbench.
 		if msg.resumed && (m.mode == modeNew || m.mode == modeDone) {
 			enableMouse := m.enterRunning()
 			m.resizeTextarea()
 			m.textarea.Placeholder = defaultSteerPlaceholder()
 			return m, tea.Batch(fetchSnapshot(m.runtime), enableMouse), true
 		}
-		// 完结书：落完成态工作台（enterRunning 开鼠标后改 modeDone），不落欢迎页——
-		// 欢迎页对已有书只字不提，用户会以为书丢了；/reopen、/export、返工输入都在工作台。
+		// Completed books land in the done-state workbench (enterRunning enables mouse reporting and then switches to modeDone), not the welcome page —
+		// the welcome page says nothing about existing books, so the user would think the book vanished; /reopen, /export, and rewrite input all live in the workbench.
 		if msg.completed && m.mode == modeNew {
 			enableMouse := m.enterRunning()
 			m.mode = modeDone
@@ -459,7 +459,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		m.askState = newAskUserState(askUserRequest(msg))
 		m.textarea.Blur()
 		m.applyEvent(host.Event{
-			Time: time.Now(), Category: "SYSTEM", Summary: "等待用户补充关键信息", Level: "info",
+			Time: time.Now(), Category: "SYSTEM", Summary: "Đang chờ người dùng bổ sung thông tin then chốt", Level: "info",
 		})
 		m.refreshEventViewport()
 		return m, listenAskUser(m.askBridge), true
@@ -479,9 +479,9 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		if msg.complete {
 			m.abortPending = false
 			m.mode = modeDone
-			// 完成态不锁输入框：停止自动续写，但用户仍可输入返工要求（modeDone 输入经
-			// Continue 唤醒新一轮 run，Arbiter 裁定返工或继续创作；/export、/model
-			// 等命令也需可用，输入框必须保持聚焦（issue #27、#38）。
+			// The done state does not lock the input box: automatic continuation stops, but the user can still enter rewrite requests (modeDone input is
+			// handled by Continue to wake a new run; Arbiter decides between rewrite or continued creation; /export and /model
+			// commands also need to remain available, so the input box must stay focused (issues #27 and #38).
 			m.textarea.Placeholder = donePlaceholder
 			return m, tea.Batch(fetchSnapshot(m.runtime), listenDone(m.runtime), m.textarea.Focus()), true
 		}
@@ -490,13 +490,13 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			m.snapshot.RuntimeState = "paused"
 			m.syncRuntimePlaceholder()
 		} else {
-			m.textarea.Placeholder = "运行中断，输入任意内容恢复创作"
+			m.textarea.Placeholder = "Phiên chạy bị gián đoạn, nhập bất kỳ nội dung nào để khôi phục sáng tác"
 		}
 		return m, tea.Batch(fetchSnapshot(m.runtime), listenDone(m.runtime)), true
 	case abortResultMsg:
 		if msg.stopped {
 			m.abortPending = true
-			m.textarea.Placeholder = "正在暂停创作..."
+			m.textarea.Placeholder = "Đang tạm dừng sáng tác..."
 		}
 		return m, nil, true
 	case reportLoadedMsg:
@@ -517,21 +517,21 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		if msg.ev.Stage == imp.StageDone {
 			if msg.ev.Continued {
-				// host 已真实启动 Engine 自动接力（Continued 由 host 依权威决策置位，非 TUI 臆测）。
-				// 关面板落到工作台，由 Init 常驻的 listenEvents/listenDone 承接引擎事件，tickSnapshot 刷新运行态。
+				// the host has truly started Engine auto-handoff (Continued is set by the host as the source of truth, not guessed by the TUI).
+				// Closing the panel lands in the workbench, where the always-on listenEvents/listenDone from Init carry engine events and tickSnapshot refreshes the running state.
 				m.importer = nil
 				enableMouse := m.enterRunning()
 				m.resizeTextarea()
 				m.textarea.Placeholder = defaultSteerPlaceholder()
 				return m, tea.Batch(enableMouse, m.textarea.Focus()), true
 			}
-			// 未接力（默认/审阅/接力失败）：停在面板等用户核对 Foundation 与章节，Esc 关闭。
+			// No handoff (default / review / handoff failed): stay on the panel and let the user review the foundation and chapters; Esc closes it.
 			return m, nil, true
 		}
 		return m, listenImportEvent(msg.reqID, msg.ch), true
 	case importClosedMsg:
-		// 通道关闭且未终态 → 管线在 awaiting 处停下（等 --yes / --story）。标记面板可关闭，
-		// 否则 Esc 只会取消已结束的 ctx，面板永远关不掉（卡死）。
+		// If the channel closes before a terminal state, the pipeline stops at awaiting (waiting for --yes / --story). Mark the panel as closable,
+		// otherwise Esc only cancels an already-finished ctx and the panel can never be closed (stuck).
 		if m.importer == nil || msg.reqID != m.importer.reqID || m.importer.done {
 			return m, nil, true
 		}
@@ -552,7 +552,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	case exportDoneMsg:
 		if msg.err != nil {
 			m.applyEvent(host.Event{
-				Time: time.Now(), Category: "ERROR", Summary: "导出失败：" + msg.err.Error(), Level: "error",
+				Time: time.Now(), Category: "ERROR", Summary: "Xuất thất bại: " + msg.err.Error(), Level: "error",
 			})
 		} else if msg.result != nil {
 			m.applyEvent(host.Event{
@@ -601,15 +601,15 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	case spinnerTickMsg:
 		m.spinnerIdx = (m.spinnerIdx + 1) % len(spinnerFrames)
 		if m.snapshot.IsRunning {
-			// 星星 / 顶栏 spinner 的视觉刷新都走这里（350ms）
+			// Visual refreshes for the star / top-bar spinner go through here (350ms)
 			m.refreshEventViewport()
 		}
 		return m, tickSpinner(), true
 	case toolSpinnerTickMsg:
 		m.toolSpinnerIdx = (m.toolSpinnerIdx + 1) % len(toolSpinnerFrames)
-		// 事件流"进行中"行的 spinner 刷新（150ms，独立节奏）。
-		// Arbiter 可在 Engine 停机态处理 Continue/查询，因此不能用 snapshot.IsRunning
-		// 作为动画前提；只要存在调用类 running 事件就刷新。没有时跳过全量重渲。
+		// Spinner refresh for the event-stream "running" row (150ms, independent cadence).
+		// Arbiter can handle Continue/queries while the Engine is stopped, so we cannot use snapshot.IsRunning
+		// as the animation prerequisite; refresh whenever any call-like running event exists. If none exist, skip the full rerender.
 		if m.hasRunningEvent() {
 			m.refreshEventViewport()
 		}
@@ -617,14 +617,14 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	case cursorTickMsg:
 		m.cursorIdx++
 		if m.snapshot.IsRunning {
-			// cursor 闪烁需要全量重渲流式面板（光标位于 content 末尾）；
-			// 顺便把 dirty 一并清掉，flush tick 紧跟着不必重复刷。
+			// Cursor blinking needs a full rerender of the stream panel (the cursor sits at the end of content);
+			// clear dirty at the same time so the following flush tick does not rerender again.
 			m.refreshStreamViewport()
 			m.streamDirty = false
 		}
 		if s := m.importer; s != nil && !s.done && !s.paused {
-			// 导入运行中：尾随星标与重试倒计时都在 viewport 内容里，按 tick 重算。
-			// 挂在 cursor tick（120ms）上与流式面板光标同速——同款星星不该一快一慢。
+			// Import running: the trailing star and retry countdown are both in the viewport content and are recomputed on each tick.
+			// Tied to the cursor tick (120ms) so it stays in sync with the stream-panel cursor — matching stars should not move at different speeds.
 			s.frame = m.cursorIdx
 			boxW, _ := reportModalSize(m.width, m.height)
 			s.refresh(paddedModalContentWidth(boxW))
@@ -635,12 +635,12 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			m.streamRounds = append(m.streamRounds, "")
 		}
 		m.streamRounds[len(m.streamRounds)-1] += string(msg)
-		// 不立即 refreshStreamViewport，由 streamFlushTick 60fps 合并刷新。
-		// LLM 高速流式期每秒数十 token，逐个刷新等于每秒数十次全量重渲 32 段。
+		// Do not refreshStreamViewport immediately; streamFlushTick merges updates at 60fps.
+		// During fast LLM streaming, there can be dozens of tokens per second; refreshing each one would mean dozens of full rerenders of 32 segments per second.
 		m.streamDirty = true
 		return m, listenStream(m.runtime), true
 	case streamClearMsg:
-		// round 边界：先把累积 delta 刷出去，新 round 才能视觉对齐
+		// Round boundary: flush the accumulated delta first so the new round aligns visually
 		if m.flushStreamIfDirty() && m.streamScroll {
 			m.streamVP.GotoBottom()
 		}
@@ -686,12 +686,12 @@ func (m Model) handleStartResultMsg(msg startResultMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(fetchSnapshot(m.runtime), m.textarea.Focus())
 		}
 		if wasStarting {
-			// 回车后已经进入工作台；启动阶段的 LLM 错误就在当前工作台展示，
-			// 不再退回欢迎页。
+			// After Enter already moved into the workbench, the LLM error during startup is shown in the current workbench,
+			// and we no longer fall back to the welcome page.
 			m.mode = modeRunning
 			m.snapshot.IsRunning = false
 			m.snapshot.RuntimeState = "idle"
-			m.textarea.Placeholder = "启动失败，请检查模型配置或使用 /model 切换模型"
+			m.textarea.Placeholder = "Khởi động thất bại, hãy kiểm tra cấu hình mô hình hoặc dùng /model để chuyển mô hình"
 			m.refreshStreamViewport()
 			m.refreshStateViewport()
 			return m, m.textarea.Focus()
@@ -724,10 +724,10 @@ func (m *Model) enterStarting(rawPrompt string) tea.Cmd {
 	enableMouse := m.enterRunning()
 	m.resetOutputPanels()
 	m.resizeTextarea()
-	m.textarea.Placeholder = "正在初始化创作..."
+	m.textarea.Placeholder = "Đang khởi tạo sáng tác..."
 	m.applyStartupPromptEvent(rawPrompt)
 	m.applyEvent(host.Event{
-		Time: time.Now(), Category: "SYSTEM", Summary: "正在初始化创作", Level: "info",
+		Time: time.Now(), Category: "SYSTEM", Summary: "Đang khởi tạo sáng tác", Level: "info",
 	})
 	m.refreshEventViewport()
 	m.refreshStreamViewport()
@@ -743,7 +743,7 @@ func (m *Model) applyStartupPromptEvent(rawPrompt string) {
 	m.applyEvent(host.Event{
 		Time:     time.Now(),
 		Category: "USER",
-		Summary:  "创作需求: " + truncate(text, maxPromptEventCols),
+		Summary:  "Yêu cầu sáng tác: " + truncate(text, maxPromptEventCols),
 		Detail:   text,
 		Level:    "info",
 	})
@@ -773,10 +773,10 @@ func (m Model) handleTextareaMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// applyEvent 把一条事件应用到 m.events：
-// - 带 ID 且已存在 → 原地更新（合并完成态字段，保留首次的 Time / Summary）
-// - 新事件 → 追加，必要时记录到 eventIndex
-// - 超过 maxEvents 时做滑动截断并重建索引
+// applyEvent applies a single event to m.events:
+// - If the event has an ID and already exists -> update in place (merge done-state fields while keeping the first Time / Summary)
+// - New event -> append it and record it in eventIndex when needed
+// - If maxEvents is exceeded, slide-trim and rebuild the index
 func (m *Model) applyEvent(ev host.Event) {
 	if ev.ID != "" {
 		if idx, ok := m.eventIndex[ev.ID]; ok && idx >= 0 && idx < len(m.events) {
@@ -793,11 +793,11 @@ func (m *Model) applyEvent(ev host.Event) {
 			if ev.Level != "" {
 				existing.Level = ev.Level
 			}
-			// Summary 非空时允许覆盖（结束态可能带补充信息）；否则保留首次
+			// Allow Summary to override when non-empty (the final state may carry extra info); otherwise keep the first one.
 			if ev.Summary != "" {
 				existing.Summary = ev.Summary
 			}
-			// 重试事件同 ID 跨 attempt 更新，新截止时刻要跟上，倒计时才会随之重置
+			// Retry events with the same ID update across attempts, and the new deadline must follow so the countdown resets correctly.
 			if !ev.RetryAt.IsZero() {
 				existing.RetryAt = ev.RetryAt
 			}
@@ -816,8 +816,8 @@ func (m *Model) applyEvent(ev host.Event) {
 	}
 }
 
-// trimStreamRounds 把 streamRounds 截断到 maxStreamRounds 段；超出从头丢弃。
-// 调用时机：每次 streamClear 新开轮次后、replay 灌完所有历史项后。
+// trimStreamRounds truncates streamRounds to maxStreamRounds segments; overflow is dropped from the front.
+// Call this after each new streamClear round starts and after replay has loaded all historical items.
 func (m *Model) trimStreamRounds() {
 	if len(m.streamRounds) <= maxStreamRounds {
 		return
@@ -851,8 +851,8 @@ func (m *Model) applyRuntimeReplay(items []domain.RuntimeQueueItem) {
 	for _, item := range items {
 		switch item.Kind {
 		case domain.RuntimeQueueUIEvent:
-			// 事件流不做回放：队列里只有完成态事件，且 Agent/Depth/Duration/Level
-			// 等渲染所需字段未随 replay 还原，出来的行残缺不齐。宁可空面板也不要半截数据。
+			// The event stream is not replayed: the queue only contains done-state events, and Agent/Depth/Duration/Level
+			// fields needed for rendering are not restored by replay, so the resulting rows are incomplete. Empty is better than half-baked data.
 			continue
 		case domain.RuntimeQueueStreamClear:
 			if len(m.streamRounds) == 0 {

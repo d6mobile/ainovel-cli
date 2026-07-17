@@ -73,7 +73,7 @@ func (s *BudgetSentinel) OnCost(total float64) {
 	}
 	if prev := s.lastTotal.Swap(math.Float64bits(total)); total == math.Float64frombits(prev) {
 		if s.zeroStreak.Add(1) >= blindZeroStreak && s.blindWarned.CompareAndSwap(false, true) {
-			s.report("warn", fmt.Sprintf("预算盲区: 连续记账但累计成本停在 $%.2f 不再增长（当前模型注册表无价且 provider 未自报 cost，或为免费模型）——预算上限不会触发", total))
+			s.report("warn", fmt.Sprintf("vùng mù ngân sách: ghi nhận liên tiếp nhưng tổng chi phí kẹt ở $%.2f và không tăng nữa (model hiện tại không có giá trong registry, provider không tự báo cost, hoặc là model miễn phí) — giới hạn ngân sách sẽ không kích hoạt", total))
 		}
 	} else {
 		s.zeroStreak.Store(0)

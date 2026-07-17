@@ -21,7 +21,7 @@ type (
 	bootstrapMsg   struct {
 		replay    []domain.RuntimeQueueItem
 		resumed   bool
-		completed bool // 目录里是本已完结的书：落完成态工作台而非欢迎页
+		completed bool // ：Hoàn tất
 		err       error
 	}
 	reportLoadedMsg struct {
@@ -104,8 +104,8 @@ func bootstrapRuntime(rt *host.Host) tea.Cmd {
 			return bootstrapMsg{replay: replay, err: err}
 		}
 		if label == "" {
-			// 完结书不可续跑（恢复视为无标签），但也不能落欢迎页装作书不存在——
-			// 直接落到完成态工作台：面板照常展示本书，/reopen、/export、返工输入都在原位。
+			// （Khôi phục），——
+			// Hoàn tất：，/reopen、/export、Làm lạiĐầu vào。
 			if rt.Snapshot().Phase == "complete" {
 				return bootstrapMsg{replay: replay, completed: true}
 			}
@@ -117,10 +117,12 @@ func bootstrapRuntime(rt *host.Host) tea.Cmd {
 	}
 }
 
-// resumeBook 会话中补跑一次恢复门禁（bootstrap 的 Resume 只在启动时跑一次）：
-// 导入完成关面板、/reopen 重开后都靠它落回创作工作台。不重放事件队列——本会话事件
-// 已由常驻 listenEvents 呈现过，重放会重复回显。待处理干预（如 /reopen 登记的续写
-// 方向）由 Resume 先经 Arbiter 裁定消化，再续跑引擎。
+// resumeBook Trung bìnhKhôi phục（bootstrap  Resume ）：
+// Hoàn tất、/reopen 。Hàng đợi——
+//
+//	listenEvents ，。Chờ xử lýCan thiệp（ /reopen
+//
+// ） Resume  Arbiter ，。
 func resumeBook(rt *host.Host) tea.Cmd {
 	return func() tea.Msg {
 		label, err := rt.Resume()
@@ -130,7 +132,7 @@ func resumeBook(rt *host.Host) tea.Cmd {
 
 func startRuntime(rt *host.Host, plan startup.Plan) tea.Cmd {
 	return func() tea.Msg {
-		// 启动侧确定性生成本书用户规则快照（用原始 prompt 归一化），须在 StartPrepared 前。
+		// （ prompt ）， StartPrepared 。
 		if err := rt.PrepareUserRules(plan.RawPrompt); err != nil {
 			return startResultMsg{err: err}
 		}

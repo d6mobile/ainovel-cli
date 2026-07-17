@@ -302,8 +302,8 @@ func wrapText(s string, maxWidth int) string {
 	var b strings.Builder
 	lineW := 0
 	for _, r := range s {
-		// 原有换行处必须重置行宽：'\n' 宽度为 0，不重置会把多行消息的累计宽度
-		// 误判为超宽，从首个被换行的行起给其后每一行都插入伪换行+缩进（整体打散）。
+		// rộng：'\n' rộng 0，rộng
+		// rộng，+（）。
 		if r == '\n' {
 			b.WriteRune(r)
 			lineW = 0

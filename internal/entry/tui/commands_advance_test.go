@@ -33,7 +33,7 @@ func TestReviewWaitingPlaceholder(t *testing.T) {
 		},
 	}
 	m.syncRuntimePlaceholder()
-	if got := m.textarea.Placeholder; !strings.Contains(got, "/next") || !strings.Contains(got, "修改意见") {
+	if got := m.textarea.Placeholder; !strings.Contains(got, "/next") || !strings.Contains(got, "ý kiến chỉnh sửa") {
 		t.Fatalf("review placeholder should expose both choices, got %q", got)
 	}
 }
