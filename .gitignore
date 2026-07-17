@@ -38,6 +38,7 @@ workspace-*/
 # Editor/IDE
 .idea/
 .vscode/
+.cache
 
 # GoReleaser artifacts
 dist/
@@ -47,3 +48,4 @@ release-notes.md
 tasks
 refer/
 output*
+workspace/

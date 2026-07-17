@@ -78,7 +78,7 @@ var statusDisplay = map[string]struct {
 // Ánh xạ màu theo danh mục sự kiện
 var categoryColors = map[string]lipgloss.AdaptiveColor{
 	"DISPATCH": colorAccent,
-	"DONE":     colorSuccess,
+	"DECISION": colorContext,
 	"TOOL":     colorTool,
 	"SYSTEM":   colorAccent,
 	"USER":     colorAccent2,

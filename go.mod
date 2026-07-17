@@ -7,10 +7,9 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.7
-	github.com/voocel/agentcore v1.7.2
-	github.com/voocel/litellm v1.6.18
-	golang.org/x/text v0.38.0
-	gopkg.in/yaml.v3 v3.0.1
+	github.com/voocel/agentcore v1.7.10
+	github.com/voocel/litellm v1.8.6
+	golang.org/x/text v0.40.0
 )
 
 require (

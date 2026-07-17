@@ -1,15 +1,14 @@
-// Package notify cung cấp kênh cảnh báo không cần người trực.
+// Package notify 提供无人值守告警通道。
 //
-// Định vị kiến trúc (architecture.md §2.3): hành động thuần quan sát —
-// cảnh báo không bao giờ can thiệp luồng điều khiển
-// (không thử lại, không điều phối lại, không dừng hệ thống),
-// chỉ "la to" các sự kiện đã có trong TUI ra ngoài màn hình.
-// Send thực thi bất đồng bộ, không bao giờ chặn Host, thất bại chỉ ghi slog.
+// 合宪定位（architecture.md §2.3）：纯观察层动作——告警永不介入控制流
+// （不重试、不改派、不停机），只是把 TUI 内已有的事件"喊"到屏幕之外。
+// Send 异步执行、永不阻塞 Host、失败只记 slog。
 package notify
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -18,25 +17,56 @@ import (
 	"time"
 )
 
-// Notification chứa toàn bộ thông tin của một cảnh báo.
+// Notification 一条告警的全部事实。
 type Notification struct {
-	Kind  string `json:"kind"`  // run_end / repeat / budget
+	Kind  string `json:"kind"`  // Kinds 返回的稳定事件名
 	Level string `json:"level"` // info / warn / error
 	Title string `json:"title"`
 	Body  string `json:"body"`
 }
 
-// Notifier phân phối thông báo theo cấu hình. Giá trị zero không dùng được,
-// phải tạo qua New; an toàn với nil (Send là noop).
+const (
+	KindRunEnd        = "run_end"
+	KindBudget        = "budget"
+	KindAdvanceGate   = "advance_gate"
+	KindStopGuard     = "stop_guard"
+	KindPlanStart     = "plan_start"
+	KindDeadlock      = "deadlock"
+	KindWorkerFailure = "worker_failure"
+)
+
+// Kinds 返回当前版本可用于 notify.events 的全部事件名。
+// 这里是通知事件契约的唯一事实源。
+func Kinds() []string {
+	return []string{
+		KindRunEnd,
+		KindBudget,
+		KindAdvanceGate,
+		KindStopGuard,
+		KindPlanStart,
+		KindDeadlock,
+		KindWorkerFailure,
+	}
+}
+
+func IsKnownKind(kind string) bool {
+	for _, known := range Kinds() {
+		if kind == known {
+			return true
+		}
+	}
+	return false
+}
+
+// Notifier 按配置分发通知。零值不可用，必须经 New 创建；nil 安全（Send noop）。
 type Notifier struct {
-	command string          // khi không rỗng thay thế kênh system (push điện thoại đi qua đây)
-	events  map[string]bool // nil = cho qua tất cả kind
+	command string          // 非空时替代 system 通道（手机推送走这里）
+	events  map[string]bool // nil = 全部 kind 放行
 	timeout time.Duration
 }
 
-// New tạo Notifier. Nếu command rỗng thì dùng kênh system tích hợp (macOS osascript /
-// Linux notify-send; không tìm thấy lệnh thì giảm cấp im lặng thành chỉ ghi slog);
-// nếu events không rỗng thì chỉ cho qua các kind được liệt kê.
+// New 创建 Notifier。command 为空走内置 system 通道（Windows 通知气泡 /
+// macOS osascript / Linux notify-send）；events 非空时只放行列出的 kind。
 func New(command string, events []string) *Notifier {
 	n := &Notifier{command: strings.TrimSpace(command), timeout: 10 * time.Second}
 	if len(events) > 0 {
@@ -48,7 +78,7 @@ func New(command string, events []string) *Notifier {
 	return n
 }
 
-// Send gửi một thông báo bất đồng bộ. Lọc, thực thi, xử lý thất bại đều không ảnh hưởng bên gọi.
+// Send 异步发送一条通知。过滤、执行、失败处理全部不影响调用方。
 func (n *Notifier) Send(nt Notification) {
 	if !n.allows(nt.Kind) {
 		return
@@ -56,7 +86,7 @@ func (n *Notifier) Send(nt Notification) {
 	go n.deliver(nt)
 }
 
-// allows trả về liệu kind có được cho qua không (Notifier nil / không có trong events thì chặn).
+// allows 返回该 kind 是否放行（nil Notifier / 未列入 events 时拦截）。
 func (n *Notifier) allows(kind string) bool {
 	if n == nil {
 		return false
@@ -64,9 +94,8 @@ func (n *Notifier) allows(kind string) bool {
 	return n.events == nil || n.events[kind]
 }
 
-// deliver thực thi một lần gửi đồng bộ (chạy bên trong goroutine; test có thể gọi trực tiếp để assert đồng bộ).
+// deliver 同步执行一次发送（goroutine 内运行；测试可直接调用以同步断言）。
 func (n *Notifier) deliver(nt Notification) {
-	defer func() { recover() }()
 	ctx, cancel := context.WithTimeout(context.Background(), n.timeout)
 	defer cancel()
 
@@ -77,47 +106,99 @@ func (n *Notifier) deliver(nt Notification) {
 		err = runSystem(ctx, nt)
 	}
 	if err != nil {
-		slog.Warn("Gửi thông báo thất bại", "module", "notify", "kind", nt.Kind, "err", err)
+		slog.Warn("通知发送失败", "module", "notify", "kind", nt.Kind, "err", err)
 	}
 }
 
-// runCommand thực thi lệnh do người dùng cấu hình: các trường được truyền qua biến môi trường
-// (một dòng curl không cần phụ thuộc ngoài, không có rủi ro injection),
-// JSON đầy đủ đồng thời ghi vào stdin (tình huống phân phối phức tạp tự phân tích).
-// Timeout được ctx cưỡng chế dừng.
+// runCommand 执行用户配置的命令：字段经环境变量传入（一行 curl 零依赖、无注入
+// 风险），完整 JSON 同时写 stdin（复杂分发场景自行解析）。超时由 ctx 强杀。
 func runCommand(ctx context.Context, command string, nt Notification) error {
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-	cmd.Env = append(os.Environ(),
-		"NOTIFY_KIND="+nt.Kind,
-		"NOTIFY_LEVEL="+nt.Level,
-		"NOTIFY_TITLE="+nt.Title,
-		"NOTIFY_BODY="+nt.Body,
-	)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		powershell, err := findPowerShell()
+		if err != nil {
+			return err
+		}
+		cmd = exec.CommandContext(ctx, powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command)
+	} else {
+		cmd = exec.CommandContext(ctx, "sh", "-c", command)
+	}
+	cmd.Env = notificationEnv(nt)
 	payload, _ := json.Marshal(nt)
 	cmd.Stdin = strings.NewReader(string(payload))
 	return cmd.Run()
 }
 
-// runSystem thông báo desktop tích hợp: chỉ áp dụng cho tình huống "người ngồi trước máy tính",
-// không tìm thấy lệnh thì giảm cấp im lặng.
+func notificationEnv(nt Notification) []string {
+	return append(os.Environ(),
+		"NOTIFY_KIND="+nt.Kind,
+		"NOTIFY_LEVEL="+nt.Level,
+		"NOTIFY_TITLE="+nt.Title,
+		"NOTIFY_BODY="+nt.Body,
+	)
+}
+
+// runSystem 内置桌面通知：只覆盖"人在电脑旁"的场景，找不到命令静默降级。
 func runSystem(ctx context.Context, nt Notification) error {
 	switch runtime.GOOS {
+	case "windows":
+		return runWindowsNotification(ctx, nt)
 	case "darwin":
 		script := "display notification " + appleScriptString(nt.Body) + " with title " + appleScriptString(nt.Title)
 		return exec.CommandContext(ctx, "osascript", "-e", script).Run()
 	case "linux":
 		if _, err := exec.LookPath("notify-send"); err != nil {
-			slog.Info("Thông báo giảm cấp thành log (không có notify-send)", "module", "notify", "title", nt.Title, "body", nt.Body)
+			slog.Info("通知降级为日志（无 notify-send）", "module", "notify", "title", nt.Title, "body", nt.Body)
 			return nil
 		}
 		return exec.CommandContext(ctx, "notify-send", nt.Title, nt.Body).Run()
 	default:
-		slog.Info("Thông báo giảm cấp thành log (nền tảng không có kênh system)", "module", "notify", "title", nt.Title, "body", nt.Body)
+		slog.Info("通知降级为日志（平台无 system 通道）", "module", "notify", "title", nt.Title, "body", nt.Body)
 		return nil
 	}
 }
 
-// appleScriptString bọc văn bản tùy ý thành chuỗi literal của AppleScript.
+// runWindowsNotification 使用系统自带 PowerShell + WinForms NotifyIcon。
+// Windows 10/11 会把气泡显示在右上角并纳入系统通知体验；无需安装模块、注册应用
+// 或携带额外二进制。调用方本就异步执行，短暂保活只用于让系统接收气泡消息。
+func runWindowsNotification(ctx context.Context, nt Notification) error {
+	powershell, err := findPowerShell()
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, powershell,
+		"-NoLogo", "-NoProfile", "-NonInteractive", "-STA", "-Command", windowsNotificationScript)
+	cmd.Env = notificationEnv(nt)
+	return cmd.Run()
+}
+
+func findPowerShell() (string, error) {
+	for _, name := range []string{"powershell.exe", "pwsh.exe", "powershell", "pwsh"} {
+		if path, err := exec.LookPath(name); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("Windows 通知需要 PowerShell，但系统未找到 powershell.exe 或 pwsh.exe")
+}
+
+const windowsNotificationScript = `$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$notify = New-Object System.Windows.Forms.NotifyIcon
+$notify.Icon = [System.Drawing.SystemIcons]::Information
+$notify.BalloonTipTitle = $env:NOTIFY_TITLE
+$notify.BalloonTipText = $env:NOTIFY_BODY
+$notify.BalloonTipIcon = switch ($env:NOTIFY_LEVEL) {
+  'error' { [System.Windows.Forms.ToolTipIcon]::Error; break }
+  'warn'  { [System.Windows.Forms.ToolTipIcon]::Warning; break }
+  default { [System.Windows.Forms.ToolTipIcon]::Info }
+}
+$notify.Visible = $true
+$notify.ShowBalloonTip(4000)
+Start-Sleep -Milliseconds 4500
+$notify.Dispose()`
+
+// appleScriptString 把任意文本包装为 AppleScript 字符串字面量。
 func appleScriptString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)

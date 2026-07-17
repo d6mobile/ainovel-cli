@@ -17,6 +17,10 @@ func renderPaddedModalFrame(boxW, boxH int, title, hint string, bodyLines []stri
 
 	innerW := max(0, boxW-2)
 	contentW := paddedModalContentWidth(boxW)
+	// hint ，rộng——rộng，。
+	if lipgloss.Width(hint) > innerW {
+		hint = truncateWidth(hint, innerW)
+	}
 	titleView := titleStyle.Render(title)
 	hintView := hintStyle.Render(hint)
 

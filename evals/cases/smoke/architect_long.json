@@ -1,0 +1,18 @@
+{
+  "id": "architect_long",
+  "category": "smoke",
+  "role": "architect",
+  "description": "长篇规划能产出分层大纲（卷弧骨架）并展开首弧，Tiến hành到写作。",
+  "prompt": "Viết một truyện dài huyền huyễn hơn hai trăm chương, nhân vật chính mang huyết thù diệt môn, từ phế tài thức tỉnh rồi từng bước khuấy đảo cục diện quyền lực của chín đại tông môn.",
+  "max_chapters": 1,
+  "target_prompts": ["architect-long.md"],
+  "expect": {
+    "phase": "writing",
+    "min_completed_chapters": 1,
+    "required_checkpoints": ["global:layered_outline", "chapter:1:commit"],
+    "no_pending": ["pending_commit", "pending_steer"]
+  },
+  "gate": {
+    "max_severity": "warning"
+  }
+}

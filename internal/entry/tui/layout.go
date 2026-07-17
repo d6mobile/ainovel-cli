@@ -95,13 +95,20 @@ func formatNumber(n int) string {
 	return string(result)
 }
 
+// truncate rộng（Trung bình 2 ），rộng"..."。
+//
+//	rune ：Trung bìnhrộng， viewport ，
+//
+// ，"、"。
 func truncate(s string, max int) string {
-	runes := []rune(s)
-	if len(runes) <= max {
+	if max <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= max {
 		return s
 	}
 	if max < 4 {
-		return string(runes[:max])
+		return truncateWidth(s, max)
 	}
-	return string(runes[:max-3]) + "..."
+	return truncateWidth(s, max-3) + "..."
 }

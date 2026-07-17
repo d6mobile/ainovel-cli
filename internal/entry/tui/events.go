@@ -19,9 +19,10 @@ type (
 	doneMsg        struct{ complete bool } // complete=true toàn bộ sách hoàn thành, false dừng do lỗi
 	abortResultMsg struct{ stopped bool }
 	bootstrapMsg   struct {
-		replay  []domain.RuntimeQueueItem
-		resumed bool
-		err     error
+		replay    []domain.RuntimeQueueItem
+		resumed   bool
+		completed bool // ：Hoàn tất
+		err       error
 	}
 	reportLoadedMsg struct {
 		reqID      int
@@ -102,16 +103,40 @@ func bootstrapRuntime(rt *host.Host) tea.Cmd {
 		if err != nil {
 			return bootstrapMsg{replay: replay, err: err}
 		}
-		if label == "" && len(replay) == 0 {
-			return nil
+		if label == "" {
+			// （Khôi phục），——
+			// Hoàn tất：，/reopen、/export、Làm lạiĐầu vào。
+			if rt.Snapshot().Phase == "complete" {
+				return bootstrapMsg{replay: replay, completed: true}
+			}
+			if len(replay) == 0 {
+				return nil
+			}
 		}
 		return bootstrapMsg{replay: replay, resumed: label != ""}
 	}
 }
 
+// resumeBook Trung bìnhKhôi phục（bootstrap  Resume ）：
+// Hoàn tất、/reopen 。Hàng đợi——
+//
+//	listenEvents ，。Chờ xử lýCan thiệp（ /reopen
+//
+// ） Resume  Arbiter ，。
+func resumeBook(rt *host.Host) tea.Cmd {
+	return func() tea.Msg {
+		label, err := rt.Resume()
+		return bootstrapMsg{resumed: label != "", err: err}
+	}
+}
+
 func startRuntime(rt *host.Host, plan startup.Plan) tea.Cmd {
 	return func() tea.Msg {
-		err := rt.StartPrepared(plan.StartPrompt)
+		// （ prompt ）， StartPrepared 。
+		if err := rt.PrepareUserRules(plan.RawPrompt); err != nil {
+			return startResultMsg{err: err}
+		}
+		err := rt.StartPrepared(plan.RawPrompt)
 		return startResultMsg{err: err}
 	}
 }

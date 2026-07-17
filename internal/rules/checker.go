@@ -1,40 +1,33 @@
 package rules
 
 import (
-	"fmt"
 	"strings"
-	"unicode/utf8"
 )
 
-// Check thực hiện kiểm tra cơ học nội dung chương theo các quy tắc có cấu trúc, trả về danh sách vi phạm thực tế.
+// Check 对章节正文按结构化规则进行机械检查，返回违规事实列表。
 //
-// Hợp đồng thiết kế:
-//   - Chỉ trả về sự thật, không ra lệnh (nguyên tắc sắt)
-//   - Không chặn bất kỳ luồng gọi nào
-//   - severity được ánh xạ cố định theo loại quy tắc (xem bảng chú thích trong types.go)
+// 设计契约：
+//   - 仅返事实，不下指令（铁律一）
+//   - 不阻断任何调用方流程
+//   - severity 按规则类型固定映射（参见 types.go 注释表）
 //
-// Tham số:
-//   - text: nội dung chương (bản cuối hoặc bản nháp đều được)
-//   - wordCount: số từ của chương (đếm theo rune). Nếu <0, checker tự tính để tránh caller quét O(n) lặp lại.
-//   - s: quy tắc có cấu trúc đã hợp nhất; nếu IsEmpty thì trả về nil luôn.
-func Check(text string, wordCount int, s Structured) []Violation {
+// 参数：
+//   - text：章节正文（终稿或草稿都可）
+//   - s：合并后的结构化规则；IsEmpty 时直接返回 nil。
+func Check(text string, s Structured) []Violation {
 	if s.IsEmpty() {
 		return nil
-	}
-	if wordCount < 0 {
-		wordCount = utf8.RuneCountInString(text)
 	}
 
 	var violations []Violation
 	violations = appendForbiddenChars(violations, text, s.ForbiddenChars)
 	violations = appendForbiddenPhrases(violations, text, s.ForbiddenPhrases)
 	violations = appendFatigueWords(violations, text, s.FatigueWords)
-	violations = appendChapterWords(violations, wordCount, s.ChapterWords)
 	return violations
 }
 
-// forbidden_chars: xuất hiện ≥1 lần là error.
-// Mỗi quy tắc chỉ tạo một violation, actual là số lần xuất hiện.
+// forbidden_chars：出现 ≥1 次即 error。
+// 同一条规则只产生一条 violation，actual 是出现次数。
 func appendForbiddenChars(vs []Violation, text string, list []string) []Violation {
 	for _, ch := range list {
 		if ch == "" {
@@ -54,7 +47,7 @@ func appendForbiddenChars(vs []Violation, text string, list []string) []Violatio
 	return vs
 }
 
-// forbidden_phrases: xuất hiện ≥1 lần là error; hành vi giống forbidden_chars, chỉ khác tên rule.
+// forbidden_phrases：出现 ≥1 次即 error；行为与 forbidden_chars 一致，仅 rule 名区分。
 func appendForbiddenPhrases(vs []Violation, text string, list []string) []Violation {
 	for _, ph := range list {
 		if ph == "" {
@@ -74,8 +67,8 @@ func appendForbiddenPhrases(vs []Violation, text string, list []string) []Violat
 	return vs
 }
 
-// fatigue_words: vi phạm khi số lần xuất hiện trong chương vượt ngưỡng, mức warning.
-// Không tích lũy qua nhiều chương — vấn đề liên chương sẽ xử lý sau bằng công cụ chẩn đoán.
+// fatigue_words：本章出现次数超过阈值才违规，warning 级。
+// 不跨章累计——跨章问题后续交诊断。
 func appendFatigueWords(vs []Violation, text string, m map[string]int) []Violation {
 	for word, limit := range m {
 		if word == "" || limit <= 0 {
@@ -93,42 +86,5 @@ func appendFatigueWords(vs []Violation, text string, m map[string]int) []Violati
 			Severity: SeverityWarning,
 		})
 	}
-	return vs
-}
-
-// chapter_words: độ lệch số từ.
-// Độ lệch < 20%: warning; độ lệch ≥ 20%: error.
-// Công thức độ lệch: thấp hơn min dùng (min-actual)/min; cao hơn max dùng (actual-max)/max.
-func appendChapterWords(vs []Violation, wordCount int, rng *WordRange) []Violation {
-	if rng == nil {
-		return vs
-	}
-	var deviation float64
-	switch {
-	case wordCount < rng.Min:
-		if rng.Min == 0 {
-			return vs
-		}
-		deviation = float64(rng.Min-wordCount) / float64(rng.Min)
-	case wordCount > rng.Max:
-		if rng.Max == 0 {
-			return vs
-		}
-		deviation = float64(wordCount-rng.Max) / float64(rng.Max)
-	default:
-		return vs // trong phạm vi cho phép
-	}
-
-	severity := SeverityWarning
-	if deviation >= ChapterWordsDeviationThreshold {
-		severity = SeverityError
-	}
-	vs = append(vs, Violation{
-		Rule:      "chapter_words",
-		Limit:     fmt.Sprintf("%d-%d", rng.Min, rng.Max),
-		Actual:    wordCount,
-		Deviation: deviation,
-		Severity:  severity,
-	})
 	return vs
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/host"
 )
 
-// CoCreateSession lưu trữ trạng thái phi UI cho chế độ đồng sáng tác.
+// CoCreateSession  UI 。
 type CoCreateSession struct {
 	history        []host.CoCreateMessage
 	draftPrompt    string
@@ -38,10 +38,10 @@ func (s *CoCreateSession) ApplyReply(reply host.CoCreateReply) {
 	}
 	s.streamReply = ""
 	s.streamThinking = ""
-	// history lưu toàn bộ Raw ba đoạn phía assistant (bao gồm [DRAFT]) để model vòng sau
-	// thấy được bản nháp mình đã viết vòng trước và tiếp tục cập nhật trên đó; nếu chỉ lưu
-	// Message thì [DRAFT] sẽ hoàn toàn không vào cửa sổ ngữ cảnh, mỗi vòng model chỉ có thể
-	// tóm lại từ hội thoại và dễ mất chi tiết ban đầu. Ở đường dự phòng Raw == Message, tương đương.
+	// history  assistant  Raw（ [DRAFT]），Mô hình
+	// 、； Message  [DRAFT]
+	// Ngữ cảnh，Mô hình，。
+	// Raw == Message，。
 	text := strings.TrimSpace(reply.Raw)
 	if text == "" {
 		text = strings.TrimSpace(reply.Message)
@@ -49,14 +49,13 @@ func (s *CoCreateSession) ApplyReply(reply host.CoCreateReply) {
 	if text != "" {
 		s.history = append(s.history, host.CoCreateMessage{Role: "assistant", Content: text})
 	}
-	// Chỉ ghi đè draft khi Prompt không rỗng: đường dự phòng parse sẽ trả về Prompt="",
-	// lúc đó phải giữ nguyên draft vòng trước, nếu không "chỉ thị sáng tác hiện tại" mà
-	// người dùng đã tích lũy sẽ bị xóa bởi phản hồi bị cắt đứt.
+	//  Prompt  draft：parse  Prompt=""，
+	//  draft，"Hiện tại"。
 	if prompt := strings.TrimSpace(reply.Prompt); prompt != "" {
 		s.draftPrompt = prompt
 	}
 	s.ready = reply.Ready
-	// suggestions ghi đè trực tiếp (kể cả ghi đè thành rỗng): gợi ý mỗi vòng chỉ có nghĩa cho thời điểm hiện tại.
+	// suggestions （）：。
 	s.suggestions = append(s.suggestions[:0], reply.Suggestions...)
 }
 
@@ -68,14 +67,14 @@ func (s *CoCreateSession) AppendUser(text string) {
 	if text == "" {
 		return
 	}
-	// Người dùng đã quyết định câu tiếp theo muốn nói, suggestions lập tức vô hiệu,
-	// tránh gợi ý cũ vẫn còn treo trên ô nhập khi AI chưa kịp phản hồi gây nhầm lẫn.
+	// ，suggestions ， AI
+	// Đầu vào。
 	s.suggestions = nil
 	s.history = append(s.history, host.CoCreateMessage{Role: "user", Content: text})
 }
 
-// ApplyDelta nhận tích lũy luồng streaming; kind="thinking" ghi vào luồng suy luận, "reply" ghi vào xem trước phản hồi.
-// Hai luồng tích lũy riêng biệt, TUI có thể tô màu theo từng khối, cho người dùng thấy LLM đang hoạt động ngay cả trong giai đoạn thinking.
+// ApplyDelta ；kind="thinking" ，"reply" 。
+// ，UI ， thinking Giai đoạn LLM 。
 func (s *CoCreateSession) ApplyDelta(kind, text string) {
 	if s == nil {
 		return
@@ -141,7 +140,7 @@ func (s *CoCreateSession) BuildPlan() (Plan, error) {
 	}
 	return Plan{
 		Mode:        ModeCoCreate,
-		DisplayName: "Kế hoạch đồng sáng tác",
-		StartPrompt: host.BuildStartPrompt(s.DraftPrompt()),
+		DisplayName: "Lập kế hoạch đồng sáng tác",
+		RawPrompt:   s.DraftPrompt(),
 	}, nil
 }

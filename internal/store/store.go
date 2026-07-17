@@ -8,7 +8,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain"
 )
 
-// Store là gốc kết hợp của quản lý trạng thái, giữ tất cả các store con.
+// Store 是状态管理的组合根，持有所有子存储。
 type Store struct {
 	dir string
 
@@ -17,7 +17,7 @@ type Store struct {
 	Drafts      *DraftStore
 	Summaries   *SummaryStore
 	RunMeta     *RunMetaStore
-	Directives  *DirectivesStore
+	UserRules   *UserRulesStore
 	Signals     *SignalStore
 	Runtime     *RuntimeStore
 	Characters  *CharacterStore
@@ -27,11 +27,12 @@ type Store struct {
 	Sessions    *SessionStore
 	Usage       *UsageStore
 	Simulation  *SimulationStore
+	Decisions   *DecisionStore
 
-	crossMu sync.Mutex // bảo vệ các thao tác nguyên tử liên miền
+	crossMu sync.Mutex // 保护跨域原子操作
 }
 
-// NewStore tạo bộ quản lý trạng thái, dir là thư mục gốc đầu ra của tiểu thuyết.
+// NewStore 创建状态管理器，dir 为小说输出根目录。
 func NewStore(dir string) *Store {
 	io := newIO(dir)
 	outline := NewOutlineStore(io)
@@ -42,7 +43,7 @@ func NewStore(dir string) *Store {
 		Drafts:      NewDraftStore(newIO(dir)),
 		Summaries:   NewSummaryStore(newIO(dir), outline),
 		RunMeta:     NewRunMetaStore(newIO(dir)),
-		Directives:  NewDirectivesStore(newIO(dir)),
+		UserRules:   NewUserRulesStore(newIO(dir)),
 		Signals:     NewSignalStore(newIO(dir)),
 		Runtime:     NewRuntimeStore(newIO(dir)),
 		Characters:  NewCharacterStore(newIO(dir), outline),
@@ -52,17 +53,18 @@ func NewStore(dir string) *Store {
 		Sessions:    NewSessionStore(newIO(dir)),
 		Usage:       NewUsageStore(newIO(dir)),
 		Simulation:  NewSimulationStore(newIO(dir)),
+		Decisions:   NewDecisionStore(newIO(dir)),
 	}
 }
 
-// Dir trả về thư mục gốc đầu ra.
+// Dir 返回输出根目录。
 func (s *Store) Dir() string { return s.dir }
 
-// CheckConsistency thực hiện một lần kiểm tra nông trên tầng dữ liệu, dùng để sinh cảnh báo khi khởi động/phục hồi.
-// Hoàn toàn chỉ đọc: không sửa dữ liệu, chỉ trả về mô tả vấn đề có thể đọc được. Bên gọi quyết định cách hiển thị (log / UI).
-// Để tránh chi phí IO khi quét toàn bộ thư mục, chỉ kiểm tra các điểm then chốt của Progress:
-//   - Chương hoàn thành cuối cùng phải có bản thảo hoàn chỉnh trong chapters/
-//   - Ở chế độ Layered, Volume/Arc hiện tại phải tìm được trong layered_outline
+// CheckConsistency 对事实层做一次浅层校验，用于启动/恢复时生成 warning。
+// 纯只读：不修正数据，仅返回可读的问题描述。调用方决定如何展示（log / UI）。
+// 为避免扫全目录带来的 IO 开销，只校验 Progress 的关键点：
+//   - 最后一个完成章节必须在 chapters/ 下存在终稿
+//   - Layered 模式下，当前 Volume/Arc 必须能在 layered_outline 中找到
 func (s *Store) CheckConsistency() []string {
 	var warnings []string
 	progress, err := s.Progress.Load()
@@ -72,7 +74,7 @@ func (s *Store) CheckConsistency() []string {
 	if n := len(progress.CompletedChapters); n > 0 {
 		lastCh := progress.CompletedChapters[n-1]
 		if text, err := s.Drafts.LoadChapterText(lastCh); err == nil && text == "" {
-			warnings = append(warnings, fmt.Sprintf("progress đánh dấu chương %d đã hoàn thành, nhưng chapters/%02d.md không tồn tại hoặc rỗng", lastCh, lastCh))
+			warnings = append(warnings, fmt.Sprintf("progress 标记第 %d 章已完成，但 chapters/%02d.md 不存在或为空", lastCh, lastCh))
 		}
 	}
 	if progress.Layered && progress.CurrentVolume > 0 && progress.CurrentArc > 0 {
@@ -92,15 +94,15 @@ func (s *Store) CheckConsistency() []string {
 				break
 			}
 			if !found {
-				warnings = append(warnings, fmt.Sprintf("progress hiện tại V%d A%d không tìm thấy mục tương ứng trong đề cương phân lớp", progress.CurrentVolume, progress.CurrentArc))
+				warnings = append(warnings, fmt.Sprintf("progress 当前 V%d A%d 在分层大纲中找不到对应条目", progress.CurrentVolume, progress.CurrentArc))
 			}
 		}
 	}
 	return warnings
 }
 
-// FoundationMissing trả về các mục còn thiếu trong cài đặt nền tảng, theo thứ tự ổn định dùng cho Prompt/Reminder.
-// Chế độ dài tập (đã có layered_outline) yêu cầu thêm compass.
+// FoundationMissing 返回基础设定中尚缺的项，按用于 Prompt/Reminder 的稳定顺序排列。
+// 长篇模式（已有 layered_outline）额外要求 compass。
 func (s *Store) FoundationMissing() []string {
 	var missing []string
 	if p, _ := s.Outline.LoadPremise(); p == "" {
@@ -123,24 +125,24 @@ func (s *Store) FoundationMissing() []string {
 	return missing
 }
 
-// Init tạo cấu trúc thư mục con cần thiết.
+// Init 创建所需的子目录结构。
 func (s *Store) Init() error {
 	return s.Progress.io.EnsureDirs([]string{
 		"chapters", "summaries", "drafts", "reviews", "meta", "meta/runtime", "meta/runtime/tasks", "meta/sessions", "meta/sessions/agents",
 	})
 }
 
-// ── Phương thức điều phối liên miền ──
+// ── 跨域协调方法 ──
 
-// ExpandArc mở rộng cung truyện khung thành các chương chi tiết (Outline + Progress liên động).
-func (s *Store) ExpandArc(volumeIdx, arcIdx int, chapters []domain.OutlineEntry) error {
+// ExpandArc 将骨架弧校准并展开为详细章节（Outline + Progress 联动）。
+func (s *Store) ExpandArc(volumeIdx, arcIdx int, expansion domain.ArcExpansion) error {
 	s.crossMu.Lock()
 	defer s.crossMu.Unlock()
 
 	s.Outline.io.mu.Lock()
 	defer s.Outline.io.mu.Unlock()
 
-	volumes, err := s.Outline.expandArcUnlocked(volumeIdx, arcIdx, chapters)
+	volumes, err := s.Outline.expandArcUnlocked(volumeIdx, arcIdx, expansion)
 	if err != nil {
 		return err
 	}
@@ -159,7 +161,7 @@ func (s *Store) ExpandArc(volumeIdx, arcIdx int, chapters []domain.OutlineEntry)
 	return s.Progress.saveUnlocked(p)
 }
 
-// AppendVolume thêm tập mới vào cuối đề cương phân lớp (Outline + Progress liên động).
+// AppendVolume 追加新卷到分层大纲末尾（Outline + Progress 联动）。
 func (s *Store) AppendVolume(vol domain.VolumeOutline) error {
 	s.crossMu.Lock()
 	defer s.crossMu.Unlock()
@@ -186,8 +188,8 @@ func (s *Store) AppendVolume(vol domain.VolumeOutline) error {
 	return s.Progress.saveUnlocked(p)
 }
 
-// ClearHandledSteer xóa PendingSteer theo cách nguyên tử và đặt lại trạng thái FlowSteering
-// (RunMeta + Progress liên động).
+// ClearHandledSteer 原子性清除 PendingSteer 并重置 FlowSteering 状态
+// （RunMeta + Progress 联动）。
 func (s *Store) ClearHandledSteer() error {
 	s.crossMu.Lock()
 	defer s.crossMu.Unlock()

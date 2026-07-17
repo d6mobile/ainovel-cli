@@ -17,7 +17,7 @@ func TestComputeBelowMinChapters(t *testing.T) {
 }
 
 func TestComputePatterns(t *testing.T) {
-	body := "他不是愤怒，而是恐惧。沉默了几息。像一盏灯。\n正文。\n"
+	body := "他不是愤怒，而是恐惧。沉默了几息。像一盏灯。她眼中闪过慌乱，心头一紧。他觉得这是一种说不出的寒意。\n正文。\n"
 	chapters := make([]string, 6)
 	for i := range chapters {
 		chapters[i] = chapterWith(body)
@@ -27,10 +27,14 @@ func TestComputePatterns(t *testing.T) {
 		t.Fatal("expected stats")
 	}
 	want := map[string]int{
-		"矫正句『不是…(而)是…』":          6,
-		"计时量词『X息/X瞬』":            6,
-		"明喻『像一/仿佛/如同/宛如』":        6,
-		"沉默节拍『沉默了/没有说话/没有回头』": 6,
+		"矫正句『不是…(而)是…』":        6,
+		"计时量词『X息/X瞬』":          6,
+		"明喻『像一/仿佛/如同/宛如』":      6,
+		"沉默节拍『沉默了/没有说话/没有回头』":  6,
+		"神态模板『眼中闪过/嘴角勾起/咬了咬唇』": 6,
+		"躯体反应『心头一紧/身子一颤/倒吸凉气』": 6,
+		"思维标记『心想/意识到/感到/觉得』":   6,
+		"抽象套话『一种说不出的/的意义在于』":   6,
 	}
 	for _, p := range s.Patterns {
 		if w, ok := want[p.Name]; ok && p.Total != w {
@@ -40,8 +44,8 @@ func TestComputePatterns(t *testing.T) {
 			t.Errorf("%s per_chapter: got %v want 1.0", p.Name, p.PerChapter)
 		}
 	}
-	if len(s.Patterns) != 4 {
-		t.Errorf("want 4 pattern classes, got %d: %+v", len(s.Patterns), s.Patterns)
+	if len(s.Patterns) != len(want) {
+		t.Errorf("want %d pattern classes, got %d: %+v", len(want), len(s.Patterns), s.Patterns)
 	}
 }
 

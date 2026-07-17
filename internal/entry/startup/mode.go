@@ -35,7 +35,7 @@ type Request struct {
 type Plan struct {
 	Mode        Mode
 	DisplayName string
-	StartPrompt string
+	RawPrompt   string // 用户原始创作要求（未包装）；供用户规则归一化使用，resume 模式为空
 	ResumeOnly  bool
 }
 

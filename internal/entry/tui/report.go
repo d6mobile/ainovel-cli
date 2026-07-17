@@ -302,6 +302,13 @@ func wrapText(s string, maxWidth int) string {
 	var b strings.Builder
 	lineW := 0
 	for _, r := range s {
+		// rộng：'\n' rộng 0，rộng
+		// rộng，+（）。
+		if r == '\n' {
+			b.WriteRune(r)
+			lineW = 0
+			continue
+		}
 		w := lipgloss.Width(string(r))
 		if lineW+w > maxWidth && lineW > 0 {
 			b.WriteRune('\n')

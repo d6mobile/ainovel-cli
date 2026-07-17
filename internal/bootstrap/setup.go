@@ -13,18 +13,15 @@ import (
 	"github.com/voocel/ainovel-cli/internal/utils"
 )
 
-// exampleConfig là template có chú thích được ghi vào ~/.ainovel/config.example.jsonc sau khi khởi tạo.
-// Nguồn dữ liệu duy nhất: nhúng trực tiếp từ config.example.jsonc cùng thư mục, tránh lệch với tài liệu mẫu.
+// exampleConfig  ~/.ainovel/config.example.jsonc 。
+//
+//	config.example.jsonc ，。
 //
 //go:embed config.example.jsonc
 var exampleConfig string
 
-// NeedsSetup kiểm tra xem có cần khởi tạo lần đầu không (kích hoạt khi file cấu hình không tồn tại).
-func NeedsSetup(flagPath string) bool {
-	if flagPath != "" {
-		_, err := os.Stat(flagPath)
-		return os.IsNotExist(err)
-	}
+// NeedsSetup （）。
+func NeedsSetup() bool {
 	if p := DefaultConfigPath(); p != "" {
 		if _, err := os.Stat(p); err == nil {
 			return false
@@ -39,9 +36,18 @@ func NeedsSetup(flagPath string) bool {
 type setupProvider struct {
 	name           string
 	label          string
-	baseURL        string // base_url điền sẵn
-	needType       bool   // proxy tùy chỉnh cần hỏi thêm type và base_url
-	apiKeyOptional bool   // true nghĩa là API Key được phép để trống
+	baseURL        string //  base_url
+	needType       bool   // Tùy chỉnh type  base_url
+	apiKeyOptional bool   // true  API Key
+}
+
+// ProviderPreset  /config  provider 。
+type ProviderPreset struct {
+	Name           string
+	Label          string
+	BaseURL        string
+	NeedType       bool
+	APIKeyOptional bool
 }
 
 var setupProviders = []setupProvider{
@@ -55,19 +61,31 @@ var setupProviders = []setupProvider{
 	{name: "grok", label: "Grok"},
 	{name: "ollama", label: "Ollama", baseURL: "http://localhost:11434/v1", apiKeyOptional: true},
 	{name: "bedrock", label: "Bedrock", apiKeyOptional: true},
-	{name: "custom", label: "Proxy tùy chỉnh", needType: true, apiKeyOptional: true},
+	{name: "custom", label: "Custom Proxy", needType: true, apiKeyOptional: true},
 }
 
-// RunSetup chạy trình khởi tạo lần đầu, trả về cấu hình đã tạo.
+// ProviderPresets x。
+func ProviderPresets() []ProviderPreset {
+	out := make([]ProviderPreset, 0, len(setupProviders))
+	for _, preset := range setupProviders {
+		out = append(out, ProviderPreset{
+			Name: preset.name, Label: preset.label, BaseURL: preset.baseURL,
+			NeedType: preset.needType, APIKeyOptional: preset.apiKeyOptional,
+		})
+	}
+	return out
+}
+
+// RunSetup ，。
 func RunSetup() (Config, error) {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")).
-		Render("Không tìm thấy file cấu hình, bắt đầu thiết lập khởi tạo..."))
-	fmt.Fprintf(os.Stderr, "  Đường dẫn file cấu hình: %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(DefaultConfigPath()))
-	fmt.Fprintf(os.Stderr, "  Sau khi hoàn tất, bạn có thể chỉnh sửa file này bất cứ lúc nào để điều chỉnh cài đặt nâng cao.\n")
+		Render("Không tìm thấy tệp cấu hình, bắt đầu thiết lập ban đầu..."))
+	fmt.Fprintf(os.Stderr, "  Đường dẫn tệp cấu hình: %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(DefaultConfigPath()))
+	fmt.Fprintf(os.Stderr, "  Sau khi hoàn tất, bạn có thể chỉnh tệp này bất cứ lúc nào để điều chỉnh thiết lập nâng cao.\n")
 	fmt.Fprintln(os.Stderr)
 
-	// Bước 1: Chọn nhà cung cấp
+	// Step 1:  Provider
 	sp, err := runProviderSelect()
 	if err != nil {
 		return Config{}, err
@@ -77,7 +95,7 @@ func RunSetup() (Config, error) {
 	var pc ProviderConfig
 	printStepDone("Provider", sp.label)
 
-	// Proxy tùy chỉnh: hỏi thêm tên và loại giao thức API
+	// Tùy chỉnh： Loại giao thức API
 	if sp.needType {
 		providerName, err = runTextInput("Tên Provider", "my-proxy")
 		if err != nil {
@@ -90,7 +108,7 @@ func RunSetup() (Config, error) {
 		pc.Type = providerType
 	}
 
-	// Bước 2: Nhập API Key
+	// Step 2: Đầu vào API Key
 	var apiKey string
 	if sp.apiKeyOptional {
 		apiKey, err = runOptionalTextInput("[2/4] API Key (có thể để trống)", "Để trống nghĩa là không dùng API Key")
@@ -107,13 +125,13 @@ func RunSetup() (Config, error) {
 		printStepDone("API Key", maskKey(apiKey))
 	}
 
-	// Bước 3: Base URL (nhấn Enter để dùng địa chỉ mặc định chính thức)
+	// Step 3: Base URL（Địa chỉ mặc định）
 	baseDefault := sp.baseURL
-	baseHint := "Để trống dùng địa chỉ chính thức"
+	baseHint := "Để trống để dùng địa chỉ chính thức"
 	if baseDefault != "" {
 		baseHint = baseDefault
 	}
-	baseURL, err := runTextInputWithDefault("[3/4] Base URL (nhấn Enter để dùng mặc định, người dùng proxy điền địa chỉ proxy)", baseHint, baseDefault)
+	baseURL, err := runTextInputWithDefault("[3/4] Base URL (nhấn Enter để dùng mặc định; người dùng proxy hãy nhập địa chỉ proxy)", baseHint, baseDefault)
 	if err != nil {
 		return Config{}, err
 	}
@@ -124,12 +142,13 @@ func RunSetup() (Config, error) {
 		printStepDone("Base URL", "Mặc định")
 	}
 
-	// Bước 4: Tên model (bắt buộc)
-	modelName, err := runTextInput("[4/4] Tên model", "ví dụ: gpt-4o / claude-sonnet-4 / gemini-2.5-pro")
+	// Step 4: Mô hình（）
+	modelName, err := runTextInput("[4/4] Tên mô hình", "Ví dụ: gpt-4o / claude-sonnet-4 / gemini-2.5-pro")
 	if err != nil {
 		return Config{}, err
 	}
 	printStepDone("Model", modelName)
+	pc.Models = []ModelConfig{{Name: modelName}}
 
 	cfg := Config{
 		Provider:  providerName,
@@ -139,25 +158,25 @@ func RunSetup() (Config, error) {
 		Style:     "default",
 	}
 
-	// Lưu cấu hình
+	//
 	path := DefaultConfigPath()
 	if err := SaveConfig(path, cfg); err != nil {
 		return cfg, fmt.Errorf("save config: %w", err)
 	}
 
-	// Tạo template có chú thích
+	//
 	saveExampleConfig()
 
-	// Thư mục tùy chọn toàn cục được tạo thống nhất bởi luồng khởi động (runWithConfig), ở đây chỉ lấy đường dẫn để hiển thị
+	// Luồng（runWithConfig），
 	rulesDir := rules.DefaultHomeRulesDir()
 
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s Cấu hình đã được lưu vào %s\n",
+	fmt.Fprintf(os.Stderr, "%s Cấu hình đã lưu vào %s\n",
 		lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("✓"), path)
-	fmt.Fprintf(os.Stderr, "  Model mặc định: %s\n", modelName)
-	fmt.Fprintln(os.Stderr, "  Để cấu hình model khác nhau theo từng vai trò, hãy chỉnh sửa file cấu hình.")
+	fmt.Fprintf(os.Stderr, "  Mặc địnhMô hình：%s\n", modelName)
+	fmt.Fprintln(os.Stderr, "  Để cấu hình mô hình khác nhau theo vai trò, hãy chỉnh tệp cấu hình.")
 	if rulesDir != "" {
-		fmt.Fprintf(os.Stderr, "  Tùy chọn viết toàn cục có thể đặt file .md trong thư mục %s (xem README.txt bên trong)\n", rulesDir)
+		fmt.Fprintf(os.Stderr, "  Có thể đặt tùy chọn viết toàn cục trong các tệp .md dưới %s (xem README.txt trong đó)\n", rulesDir)
 	}
 	fmt.Fprintln(os.Stderr)
 
@@ -172,7 +191,7 @@ func saveExampleConfig() {
 	_ = os.WriteFile(filepath.Join(dir, "config.example.jsonc"), []byte(exampleConfig), 0o644)
 }
 
-// printStepDone in dòng xác nhận hoàn thành một bước.
+// printStepDone Hoàn tất。
 func printStepDone(label, value string) {
 	fmt.Fprintf(os.Stderr, "  %s %s: %s\n",
 		lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("✓"),
@@ -187,11 +206,11 @@ func maskKey(key string) string {
 	return key[:4] + "****" + key[len(key)-4:]
 }
 
-// ---------- Thành phần TUI ----------
+// ---------- TUI  ----------
 
 func runProviderSelect() (setupProvider, error) {
 	m := setupSelectModel{
-		title: "[1/4] Chọn nhà cung cấp",
+		title: "[1/4] Chọn Provider",
 		items: setupProviders,
 	}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
@@ -264,7 +283,7 @@ func runTextInputWithDefault(label, placeholder, defaultValue string) (string, e
 	return utils.CleanInputLine(result.value), nil
 }
 
-// ---------- Bộ chọn ----------
+// ----------  ----------
 
 var (
 	setupCursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
@@ -316,17 +335,17 @@ func (m setupSelectModel) View() string {
 		}
 		b.WriteString(cursor + label + "\n")
 	}
-	b.WriteString(setupDimStyle.Render("\n  ↑↓ chọn  Enter xác nhận  Esc hủy"))
+	b.WriteString(setupDimStyle.Render("\n  ↑↓ Chọn  Enter Xác nhận  Esc Hủy"))
 	return b.String()
 }
 
-// ---------- Nhập văn bản ----------
+// ---------- Đầu vào ----------
 
 type setupInputModel struct {
 	label        string
 	placeholder  string
-	defaultValue string // giá trị mặc định khi nhấn Enter trực tiếp
-	allowEmpty   bool   // cho phép nhập giá trị rỗng
+	defaultValue string // Mặc định
+	allowEmpty   bool   // Đầu vào
 	value        string
 	cancelled    bool
 }
@@ -371,7 +390,7 @@ func (m setupInputModel) View() string {
 		b.WriteString(m.value)
 		b.WriteString(setupCursorStyle.Render("▌"))
 	}
-	b.WriteString(setupDimStyle.Render("  (Enter xác nhận, Esc hủy)"))
+	b.WriteString(setupDimStyle.Render("  (Enter Xác nhận, Esc Hủy)"))
 	b.WriteString("\n")
 	return b.String()
 }

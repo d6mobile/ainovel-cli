@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
@@ -162,7 +163,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 
 	tool := NewSaveFoundationTool(s)
 
-	// Tạo layered_outline ban đầu (tập 1)
+	// 先创建初始 layered_outline（卷1）
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
@@ -178,9 +179,10 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 		t.Fatalf("Execute layered: %v", err)
 	}
 
-	// append_volume: nối thêm tập 2
+	// append_volume：追加卷2
 	appendArgs, _ := json.Marshal(map[string]any{
-		"type": "append_volume",
+		"type":   "append_volume",
+		"reason": "主线仍有多条长线未收束，需继续第二卷",
 		"content": map[string]any{
 			"index": 2, "title": "第二卷", "theme": "升级",
 			"arcs": []map[string]any{{
@@ -199,13 +201,72 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 		t.Fatalf("expected volume=2, got %v", result["volume"])
 	}
 
-	// Xác minh đề cương có 2 tập
+	// 验证大纲有 2 卷
 	volumes, _ := s.Outline.LoadLayeredOutline()
 	if len(volumes) != 2 {
 		t.Fatalf("expected 2 volumes, got %d", len(volumes))
 	}
 	if volumes[1].Title != "第二卷" {
 		t.Fatalf("expected title '第二卷', got %q", volumes[1].Title)
+	}
+
+	// 卷末判定理由必须进裁定审计
+	recs, _ := s.Decisions.Recent(1)
+	if len(recs) != 1 || recs[0].Kind != "volume_end" || recs[0].Decider != "architect" {
+		t.Fatalf("append_volume 应落一条 volume_end 裁定审计, got %+v", recs)
+	}
+	if recs[0].Reason == "" || !strings.Contains(string(recs[0].Decision), `"append_volume"`) {
+		t.Fatalf("审计记录应含 reason 与 action, got %+v", recs[0])
+	}
+}
+
+func TestSaveFoundationExpandArcCalibratesTarget(t *testing.T) {
+	dir := t.TempDir()
+	s := store.NewStore(dir)
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Init("test", 5); err != nil {
+		t.Fatalf("InitProgress: %v", err)
+	}
+	if err := s.Outline.SaveLayeredOutline([]domain.VolumeOutline{{
+		Index: 1, Title: "第一卷", Theme: "选择",
+		Arcs: []domain.ArcOutline{
+			{Index: 1, Title: "已完成弧", Goal: "建立同盟", Chapters: []domain.OutlineEntry{{Title: "分裂", CoreEvent: "同盟意外破裂"}}},
+			{Index: 2, Title: "旧标题", Goal: "维持同盟", EstimatedChapters: 4},
+		},
+	}}); err != nil {
+		t.Fatalf("SaveLayeredOutline: %v", err)
+	}
+
+	tool := NewSaveFoundationTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"type": "expand_arc", "volume": 1, "arc": 2,
+		"content": map[string]any{
+			"title": "裂盟之后",
+			"goal":  "让分裂后的双方以不同选择推进同一主线",
+			"chapters": []map[string]any{{
+				"title": "各走一边", "core_event": "双方分别追索真相", "hook": "两条线索意外重合", "scenes": []string{"分道", "追索"},
+			}},
+		},
+	})
+	result, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("Execute expand_arc: %v", err)
+	}
+	var facts map[string]any
+	if err := json.Unmarshal(result, &facts); err != nil {
+		t.Fatalf("Unmarshal result: %v", err)
+	}
+	if facts["title"] != "裂盟之后" || facts["goal"] != "让分裂后的双方以不同选择推进同一主线" {
+		t.Fatalf("expected calibrated facts, got %+v", facts)
+	}
+	volumes, err := s.Outline.LoadLayeredOutline()
+	if err != nil {
+		t.Fatalf("LoadLayeredOutline: %v", err)
+	}
+	if got := volumes[0].Arcs[1]; got.Title != "裂盟之后" || got.Goal != "让分裂后的双方以不同选择推进同一主线" || len(got.Chapters) != 1 {
+		t.Fatalf("unexpected expanded arc: %+v", got)
 	}
 }
 
@@ -221,7 +282,7 @@ func TestSaveFoundationAppendVolumeValidation(t *testing.T) {
 
 	tool := NewSaveFoundationTool(s)
 
-	// Tập ban đầu
+	// 初始卷
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
@@ -235,9 +296,10 @@ func TestSaveFoundationAppendVolumeValidation(t *testing.T) {
 	})
 	tool.Execute(context.Background(), layeredArgs)
 
-	// Index không tăng dần → phải thất bại (kiểm tra cấu trúc)
+	// Index 不递增 → 应失败（结构性校验）
 	appendArgs, _ := json.Marshal(map[string]any{
-		"type": "append_volume",
+		"type":   "append_volume",
+		"reason": "测试理由",
 		"content": map[string]any{
 			"index": 1, "title": "重复 Index", "theme": "x",
 			"arcs": []map[string]any{{
@@ -252,8 +314,8 @@ func TestSaveFoundationAppendVolumeValidation(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationAppendVolumeRejectsAfterComplete xác minh rằng append_volume không được phép sau khi Phase=Complete.
-// Thay thế ngữ nghĩa cũ "từ chối nối thêm tập Final" (trường Final đã bị xóa).
+// TestSaveFoundationAppendVolumeRejectsAfterComplete 验证 Phase=Complete 后不允许 append_volume。
+// 取代旧的"Final 卷拒绝追加"语义（Final 字段已删除）。
 func TestSaveFoundationAppendVolumeRejectsAfterComplete(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -269,7 +331,8 @@ func TestSaveFoundationAppendVolumeRejectsAfterComplete(t *testing.T) {
 
 	tool := NewSaveFoundationTool(s)
 	appendArgs, _ := json.Marshal(map[string]any{
-		"type": "append_volume",
+		"type":   "append_volume",
+		"reason": "测试理由",
 		"content": map[string]any{
 			"index": 1, "title": "尝试续写", "theme": "x",
 			"arcs": []map[string]any{{
@@ -325,7 +388,7 @@ func TestSaveFoundationUpdateCompassOverridesLastUpdated(t *testing.T) {
 	if err := s.Progress.Save(&domain.Progress{
 		NovelName:         "光斑",
 		Phase:             domain.PhaseWriting,
-		CompletedChapters: []int{1, 2, 3, 5, 4}, // thứ tự lộn xộn, xác minh lấy max chứ không phải len
+		CompletedChapters: []int{1, 2, 3, 5, 4}, // 乱序，验证取 max 而非 len
 	}); err != nil {
 		t.Fatalf("Save progress: %v", err)
 	}
@@ -336,7 +399,7 @@ func TestSaveFoundationUpdateCompassOverridesLastUpdated(t *testing.T) {
 		"content": map[string]any{
 			"ending_direction": "主角面对最终抉择",
 			"open_threads":     []string{"线索A"},
-			"last_updated":     0, // LLM thường quên điền hoặc để 0
+			"last_updated":     0, // LLM 通常忘填或留 0
 		},
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
@@ -408,9 +471,9 @@ func TestSaveFoundationAcceptsDirectJSONArrayContent(t *testing.T) {
 	}
 }
 
-// completeBookSetup tạo một Store tối giản đang ở giai đoạn writing, dùng cho các test complete_book.
-// complete_book không kiểm tra tính đầy đủ của các chương trong layered_outline (trách nhiệm phán định thuộc về "danh sách phán định hoàn kết" của LLM),
-// tầng công cụ chỉ kiểm tra PendingRewrites rỗng và progress đã được khởi tạo.
+// completeBookSetup 建一份处于 writing 阶段、共 2 章的最小 Store,用于 complete_book
+// 系列测试。工具层校验(全部可枚举,进代码不进提示词):progress 已初始化、
+// PendingRewrites 为空、至少写完一章、大纲内无未写章节。
 func completeBookSetup(t *testing.T) *store.Store {
 	t.Helper()
 	dir := t.TempDir()
@@ -418,7 +481,7 @@ func completeBookSetup(t *testing.T) *store.Store {
 	if err := s.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	if err := s.Progress.Init("test", 0); err != nil {
+	if err := s.Progress.Init("test", 2); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
 	_ = s.Progress.UpdatePhase(domain.PhaseWriting)
@@ -427,9 +490,15 @@ func completeBookSetup(t *testing.T) *store.Store {
 
 func TestSaveFoundationCompleteBookPushesPhaseComplete(t *testing.T) {
 	s := completeBookSetup(t)
+	for ch := 1; ch <= 2; ch++ {
+		if err := s.Progress.MarkChapterComplete(ch, 3000, "", ""); err != nil {
+			t.Fatalf("MarkChapterComplete(%d): %v", ch, err)
+		}
+	}
 	tool := NewSaveFoundationTool(s)
 	args, _ := json.Marshal(map[string]any{
 		"type": "complete_book", "content": map[string]any{},
+		"reason": "两章大纲全部写完，终局命题已回答",
 	})
 	res, err := tool.Execute(context.Background(), args)
 	if err != nil {
@@ -447,10 +516,102 @@ func TestSaveFoundationCompleteBookPushesPhaseComplete(t *testing.T) {
 	if progress.Phase != domain.PhaseComplete {
 		t.Fatalf("expected progress.Phase=complete, got %s", progress.Phase)
 	}
+
+	// 完结判定的理由必须进裁定审计（事实快照取判定时刻）
+	recs, _ := s.Decisions.Recent(1)
+	if len(recs) != 1 || recs[0].Kind != "volume_end" || recs[0].Decider != "architect" {
+		t.Fatalf("complete_book 应落一条 volume_end 裁定审计, got %+v", recs)
+	}
+	if recs[0].Reason == "" || !strings.Contains(string(recs[0].Decision), `"complete_book"`) {
+		t.Fatalf("审计记录应含 reason 与 action, got %+v", recs[0])
+	}
+	if !strings.Contains(string(recs[0].Facts), `"completed_chapters":2`) {
+		t.Fatalf("审计 facts 应含判定时刻进度, got %s", recs[0].Facts)
+	}
+}
+
+// TestSaveFoundationCompleteBookRejectsZeroChapters 复现真实事故:规划刚落盘
+// phase 自动翻到 writing,弱模型顺手误调 complete_book——一章未写必须拒绝,
+// 否则整本书被跳过(0/68 章标记完本)。
+func TestSaveFoundationCompleteBookRejectsZeroChapters(t *testing.T) {
+	s := completeBookSetup(t)
+	tool := NewSaveFoundationTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"type": "complete_book", "content": map[string]any{},
+		"reason": "测试理由",
+	})
+	if _, err := tool.Execute(context.Background(), args); err == nil {
+		t.Fatal("一章未写的 complete_book 必须被拒")
+	}
+	progress, _ := s.Progress.Load()
+	if progress.Phase != domain.PhaseWriting {
+		t.Fatalf("phase 应保持 writing, got %s", progress.Phase)
+	}
+}
+
+// TestSaveFoundationCompleteBookRejectsOpenThreads 守护"长线未收束不可完本"的工具级
+// 防线：OpenThreads 契约即"需收束才能结局"，但实测架构师会在论述里把未收束长线豁免为
+// "作者有意留白"直接完本（导入完本书续写场景，用户续写诉求被完本规则锁死）。豁免必须
+// 显式落盘——update_compass 清空 open_threads 后方可完本。
+func TestSaveFoundationCompleteBookRejectsOpenThreads(t *testing.T) {
+	s := completeBookSetup(t)
+	for ch := 1; ch <= 2; ch++ {
+		if err := s.Progress.MarkChapterComplete(ch, 3000, "", ""); err != nil {
+			t.Fatalf("MarkChapterComplete(%d): %v", ch, err)
+		}
+	}
+	if err := s.Outline.SaveCompass(domain.StoryCompass{
+		EndingDirection: "潜在终局", OpenThreads: []string{"八十年大限走向", "精变重逢可能"},
+	}); err != nil {
+		t.Fatalf("SaveCompass: %v", err)
+	}
+	tool := NewSaveFoundationTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"type": "complete_book", "content": map[string]any{}, "reason": "主线已闭合",
+	})
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil || !strings.Contains(err.Error(), "open_threads") {
+		t.Fatalf("open_threads 非空应拒绝完本并指引 update_compass，得：%v", err)
+	}
+	if p, _ := s.Progress.Load(); p.Phase != domain.PhaseWriting {
+		t.Fatalf("phase 应保持 writing，得 %s", p.Phase)
+	}
+	// 显式收束落盘（update_compass 清空 open_threads）后放行。
+	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "终局已达成"}); err != nil {
+		t.Fatalf("SaveCompass: %v", err)
+	}
+	if _, err := tool.Execute(context.Background(), args); err != nil {
+		t.Fatalf("长线清空后完本应放行：%v", err)
+	}
+}
+
+// TestSaveFoundationCompleteBookRejectsUnwrittenChapters 大纲内还有未写章节时
+// 不可完本(提前收束的正规路径是 final 收官卷)。
+func TestSaveFoundationCompleteBookRejectsUnwrittenChapters(t *testing.T) {
+	s := completeBookSetup(t)
+	if err := s.Progress.MarkChapterComplete(1, 3000, "", ""); err != nil {
+		t.Fatalf("MarkChapterComplete: %v", err)
+	}
+	tool := NewSaveFoundationTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"type": "complete_book", "content": map[string]any{},
+		"reason": "测试理由",
+	})
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil {
+		t.Fatal("大纲内有未写章节的 complete_book 必须被拒")
+	}
+	if !strings.Contains(err.Error(), "final") {
+		t.Fatalf("拒绝文案应引导 final 收官卷路径, got %v", err)
+	}
+	progress, _ := s.Progress.Load()
+	if progress.Phase != domain.PhaseWriting {
+		t.Fatalf("phase 应保持 writing, got %s", progress.Phase)
+	}
 }
 
 func TestSaveFoundationCompleteBookRejectsBeforeWriting(t *testing.T) {
-	// Gọi nhầm complete_book trong giai đoạn lập kế hoạch phải bị từ chối, nếu không sẽ bỏ qua toàn bộ quá trình viết.
+	// 规划阶段误调 complete_book 必须被拒，否则会直接跳过整本写作。
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
@@ -464,6 +625,7 @@ func TestSaveFoundationCompleteBookRejectsBeforeWriting(t *testing.T) {
 	tool := NewSaveFoundationTool(s)
 	args, _ := json.Marshal(map[string]any{
 		"type": "complete_book", "content": map[string]any{},
+		"reason": "测试理由",
 	})
 	if _, err := tool.Execute(context.Background(), args); err == nil {
 		t.Fatal("expected error when phase != writing")
@@ -471,6 +633,25 @@ func TestSaveFoundationCompleteBookRejectsBeforeWriting(t *testing.T) {
 	progress, _ := s.Progress.Load()
 	if progress.Phase != domain.PhaseOutline {
 		t.Fatalf("phase should remain outline, got %s", progress.Phase)
+	}
+}
+
+// TestSaveFoundationVolumeEndRequiresReason 卷末三选一必须带判定理由——
+// 它是全书最重的语义判断，理由要成为审计事实而不是散在会话日志里。
+func TestSaveFoundationVolumeEndRequiresReason(t *testing.T) {
+	s := completeBookSetup(t)
+	tool := NewSaveFoundationTool(s)
+	for _, typ := range []string{"append_volume", "complete_book"} {
+		args, _ := json.Marshal(map[string]any{
+			"type": typ, "content": map[string]any{},
+		})
+		_, err := tool.Execute(context.Background(), args)
+		if err == nil || !strings.Contains(err.Error(), "reason") {
+			t.Fatalf("%s 缺 reason 必须被拒且文案提及 reason, got %v", typ, err)
+		}
+	}
+	if recs, _ := s.Decisions.Recent(1); len(recs) != 0 {
+		t.Fatalf("被拒调用不应产生审计记录, got %+v", recs)
 	}
 }
 
@@ -485,6 +666,7 @@ func TestSaveFoundationCompleteBookRejectsWithPendingRewrites(t *testing.T) {
 	tool := NewSaveFoundationTool(s)
 	args, _ := json.Marshal(map[string]any{
 		"type": "complete_book", "content": map[string]any{},
+		"reason": "测试理由",
 	})
 	if _, err := tool.Execute(context.Background(), args); err == nil {
 		t.Fatal("expected error when PendingRewrites non-empty")

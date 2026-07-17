@@ -1,0 +1,18 @@
+{
+  "id": "architect_short",
+  "category": "smoke",
+  "role": "architect",
+  "description": "短篇规划能保存大纲与Vai trò等基础设定，并Tiến hành到写作阶段。",
+  "prompt": "Viết một truyện ngắn huyền nghi khoảng ba vạn chữ: trong sơn trang khép kín liên tiếp có người mất tích qua một đêm, chỉ một vị khách ngoại lai nhìn ra sơ hở.",
+  "max_chapters": 1,
+  "target_prompts": ["architect-short.md"],
+  "expect": {
+    "phase": "writing",
+    "min_completed_chapters": 1,
+    "required_checkpoints": ["global:outline", "global:characters", "chapter:1:commit"],
+    "no_pending": ["pending_commit", "pending_steer"]
+  },
+  "gate": {
+    "max_severity": "warning"
+  }
+}

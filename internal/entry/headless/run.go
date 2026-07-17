@@ -23,9 +23,10 @@ type Options struct {
 	Stderr io.Writer
 }
 
-// Run chạy nhân phiên làm việc ở chế độ không giao diện, tiêu thụ trực tiếp các sự kiện Engine và đầu ra streaming.
-// Nếu sau này thêm các phương thức khởi động dùng chung như “tiếp tục viết tiểu thuyết có sẵn”,
-// không nên đưa thẳng vào đây mà hãy đưa vào internal/entry/startup, rồi để entry headless gọi lại.
+// Run ， Engine Đầu ra。
+// “”，，
+//
+//	internal/entry/startup， headless 。
 func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 	stdout := opts.Stdout
 	if stdout == nil {
@@ -48,8 +49,8 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 	cleanup := logger.SetupFile(eng.Dir(), "headless.log", false)
 	defer cleanup()
 	defer eng.Close()
-	// Khi chạy xong hoặc trả về lỗi, xuất một bản chẩn đoán đã ẩn danh hóa để người dùng headless dễ báo issue.
-	// (Các trường hợp bị kill từ bên ngoài không đi qua defer, vẫn cần dùng /diag thủ công trong TUI.)
+	//  / ， headless  issue。
+	// （ kill  defer， TUI  /diag。）
 	defer func() { _, _ = diag.Export(store.NewStore(eng.Dir())) }()
 
 	prompt := strings.TrimSpace(opts.Prompt)
@@ -63,8 +64,12 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(stderr, "headless khởi động: %s\n", eng.Dir())
-		if err := eng.StartPrepared(plan.StartPrompt); err != nil {
+		fmt.Fprintf(stderr, "khởi động headless: %s\n", eng.Dir())
+		// （ prompt ）， StartPrepared 。
+		if err := eng.PrepareUserRules(plan.RawPrompt); err != nil {
+			return err
+		}
+		if err := eng.StartPrepared(plan.RawPrompt); err != nil {
 			return err
 		}
 	} else {
@@ -81,9 +86,9 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 			return err
 		}
 		if label == "" {
-			return fmt.Errorf("chế độ headless yêu cầu --prompt, hoặc thư mục đầu ra %q phải có phiên có thể khôi phục", eng.Dir())
+			return fmt.Errorf("chế độ headless cần --prompt, hoặc thư mục đầu ra %q đã có phiên có thể khôi phục", eng.Dir())
 		}
-		fmt.Fprintf(stderr, "headless khôi phục: %s (%s)\n", eng.Dir(), label)
+		fmt.Fprintf(stderr, "khôi phục headless: %s (%s)\n", eng.Dir(), label)
 		return consume(eng, stdout, stderr, roundHasContent)
 	}
 

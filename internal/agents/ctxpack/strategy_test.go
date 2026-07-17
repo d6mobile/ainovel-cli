@@ -20,10 +20,10 @@ func TestStoreSummaryCompactApplyUsesPersistentStoreData(t *testing.T) {
 	})
 
 	msgs := []agentcore.AgentMessage{
-		agentcore.UserMsg(strings.Repeat("旧上下文", 80)),
+		agentcore.UserMsg(strings.Repeat("旧上下文", 400)),
 		agentcore.Message{
 			Role:    agentcore.RoleAssistant,
-			Content: []agentcore.ContentBlock{agentcore.TextBlock(strings.Repeat("旧回复", 80))},
+			Content: []agentcore.ContentBlock{agentcore.TextBlock(strings.Repeat("旧回复", 400))},
 		},
 		agentcore.UserMsg("继续写第三章，注意承接第二章结尾。"),
 		agentcore.Message{
@@ -53,16 +53,16 @@ func TestStoreSummaryCompactApplyUsesPersistentStoreData(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ContextSummary, got %T", out[0])
 	}
-	if !strings.Contains(summary.Summary, "最近章节摘要") {
+	if !strings.Contains(summary.Summary, "Tóm tắt chương gần đây") {
 		t.Fatalf("expected persistent summaries in checkpoint, got %q", summary.Summary)
 	}
-	if !strings.Contains(summary.Summary, "当前章节计划") {
+	if !strings.Contains(summary.Summary, "Kế hoạch chương hiện tại") {
 		t.Fatalf("expected chapter plan in checkpoint, got %q", summary.Summary)
 	}
-	if !strings.Contains(summary.Summary, "活跃伏笔") {
+	if !strings.Contains(summary.Summary, "Phục bút đang hoạt động") {
 		t.Fatalf("expected foreshadow data in checkpoint, got %q", summary.Summary)
 	}
-	if !strings.Contains(summary.Summary, "待修审稿问题") {
+	if !strings.Contains(summary.Summary, "Vấn đề chờ sửa từ biên tập") {
 		t.Fatalf("expected pending review section in checkpoint, got %q", summary.Summary)
 	}
 	if !strings.Contains(summary.Summary, "仓库线索需要再蓄压一拍") {
@@ -126,10 +126,10 @@ func TestWriterRestorePackRefreshReusesStoreBuilder(t *testing.T) {
 	if !strings.Contains(text, "<post-compact-context>") {
 		t.Fatalf("expected wrapped restore context, got %q", text)
 	}
-	if !strings.Contains(text, "待修审稿问题") {
+	if !strings.Contains(text, "Vấn đề chờ sửa từ biên tập") {
 		t.Fatalf("expected pending review section, got %q", text)
 	}
-	if !strings.Contains(text, "当前章节计划") {
+	if !strings.Contains(text, "Kế hoạch chương hiện tại") {
 		t.Fatalf("expected chapter plan section, got %q", text)
 	}
 }

@@ -106,6 +106,63 @@ func TestCheckArcBoundaryNextArcInSameVolume(t *testing.T) {
 	}
 }
 
+func TestExpandArcCalibratesUnwrittenPlan(t *testing.T) {
+	s := setupLayered(t, []domain.VolumeOutline{{
+		Index: 1, Title: "第一卷", Theme: "起步",
+		Arcs: []domain.ArcOutline{
+			{Index: 1, Title: "旧弧", Goal: "造成计划外的决裂", Chapters: []domain.OutlineEntry{{Title: "决裂", CoreEvent: "同伴离队", Hook: "去向不明"}}},
+			{Index: 2, Title: "原骨架", Goal: "按原计划同行", EstimatedChapters: 8},
+		},
+	}})
+
+	expansion := domain.ArcExpansion{
+		Title: "分途追索",
+		Goal:  "承认决裂已经发生，让两条行动线分别逼近同一真相",
+		Chapters: []domain.OutlineEntry{
+			{Title: "两张地图", CoreEvent: "两队从不同线索出发", Hook: "线索指向同一地点"},
+			{Title: "隔墙回声", CoreEvent: "双方隔空影响彼此选择", Hook: "重逢代价浮现"},
+		},
+	}
+	if err := s.ExpandArc(1, 2, expansion); err != nil {
+		t.Fatalf("ExpandArc: %v", err)
+	}
+
+	volumes, err := s.Outline.LoadLayeredOutline()
+	if err != nil {
+		t.Fatalf("LoadLayeredOutline: %v", err)
+	}
+	got := volumes[0].Arcs[1]
+	if got.Title != expansion.Title || got.Goal != expansion.Goal {
+		t.Fatalf("expected calibrated title/goal, got title=%q goal=%q", got.Title, got.Goal)
+	}
+	if got.EstimatedChapters != 0 || len(got.Chapters) != 2 {
+		t.Fatalf("expected expanded arc, got estimated=%d chapters=%d", got.EstimatedChapters, len(got.Chapters))
+	}
+	flat, err := s.Outline.LoadOutline()
+	if err != nil {
+		t.Fatalf("LoadOutline: %v", err)
+	}
+	if len(flat) != 3 || flat[1].Chapter != 2 || flat[2].Chapter != 3 {
+		t.Fatalf("expected continuous flattened outline, got %+v", flat)
+	}
+	progress, err := s.Progress.Load()
+	if err != nil {
+		t.Fatalf("LoadProgress: %v", err)
+	}
+	if progress.TotalChapters != 3 {
+		t.Fatalf("expected total chapters 3, got %d", progress.TotalChapters)
+	}
+
+	if err := s.ExpandArc(1, 2, expansion); err != nil {
+		t.Fatalf("same expansion must be idempotent: %v", err)
+	}
+	changed := expansion
+	changed.Goal = "事后改写已展开弧"
+	if err := s.ExpandArc(1, 2, changed); err == nil {
+		t.Fatal("expected a different expansion to reject overwriting the expanded arc")
+	}
+}
+
 func TestAppendVolumeValidation(t *testing.T) {
 	s := setupLayered(t, []domain.VolumeOutline{{
 		Index: 1, Title: "第一卷", Theme: "起步",
@@ -188,5 +245,40 @@ func TestSaveAndLoadCompass(t *testing.T) {
 	}
 	if len(loaded.OpenThreads) != 2 {
 		t.Fatalf("expected 2 threads, got %d", len(loaded.OpenThreads))
+	}
+}
+
+// TestOutlineFeedbackPool 反馈池闭环:commit 落盘 → 跨重启可读 → 结构操作消费清空。
+func TestOutlineFeedbackPool(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	if err := s.Outline.AppendOutlineFeedback(ChapterFeedback{Chapter: 3, Deviation: "支线膨胀", Suggestion: "下一弧收线"}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if err := s.Outline.AppendOutlineFeedback(ChapterFeedback{Chapter: 4, Suggestion: "反派提前登场"}); err != nil {
+		t.Fatalf("append2: %v", err)
+	}
+
+	// 跨重启(新 Store 实例)可读——不是内存态
+	s2 := NewStore(dir)
+	fbs := s2.Outline.LoadPendingOutlineFeedback()
+	if len(fbs) != 2 || fbs[0].Chapter != 3 || fbs[1].Suggestion != "反派提前登场" {
+		t.Fatalf("跨重启读取失败: %+v", fbs)
+	}
+	for _, fb := range fbs {
+		if fb.At == "" {
+			t.Fatal("At 应自动补齐")
+		}
+	}
+
+	if err := s2.Outline.ClearOutlineFeedback(); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if left := s2.Outline.LoadPendingOutlineFeedback(); len(left) != 0 {
+		t.Fatalf("消费后应为空: %+v", left)
+	}
+	// 幂等清空
+	if err := s2.Outline.ClearOutlineFeedback(); err != nil {
+		t.Fatalf("clear idempotent: %v", err)
 	}
 }
