@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -9,23 +8,22 @@ import (
 	"github.com/voocel/ainovel-cli/internal/host"
 )
 
-// renderInputBox vẽ vùng nhập liệu ở phía dưới màn hình.
-// Ô nhập chỉ chịu trách nhiệm nhập liệu và hiển thị gợi ý, không chứa thanh chế độ khởi động.
+// renderInputBox 渲染底部输入区：输入框、快捷键提示行、最底部用量状态栏。
+// 输入框单独负责输入与提示，不承载启动模式栏。
 func renderInputBox(inputView, hints string, snap host.UISnapshot, outputDir string, width int) string {
 	innerW := width - 4 // border + padding
 	if innerW < 12 {
 		innerW = 12
 	}
 
-	// Dòng nhập: ký hiệu nhắc + ô nhập liệu
+	// 输入行：提示符 + 输入框
 	prompt := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render("❯ ")
 	inputLine := prompt + inputView
 
-	// Dòng gợi ý: phím tắt bên trái, tiến độ bên phải
-	info := buildRightInfo(snap, outputDir)
-	line2 := joinInlineSides(hints, info, innerW)
+	// 提示行：快捷键独占整行——模型/花费等运行信息移入底部状态栏，不再挤在右侧互相截断。
+	line2 := fitInlineLine(hints, innerW)
 
-	// Vùng nhập (một hộp duy nhất, tránh hiển thị hai ô nhập về mặt trực quan)
+	// 输入区（单一盒子，避免视觉上出现双输入框）
 	inputStyle := lipgloss.NewStyle().
 		Width(width).
 		Border(baseBorder, true, false, true, false).
@@ -33,41 +31,16 @@ func renderInputBox(inputView, hints string, snap host.UISnapshot, outputDir str
 		Padding(0, 1)
 	inputBlock := inputStyle.Render(inputLine)
 
-	// Dòng gợi ý (không có viền, nằm sát ngay bên dưới đường ngang dưới)
+	// 提示行（无边框，紧贴下横线下方）
 	hintStyle := lipgloss.NewStyle().
 		Width(width).
 		Padding(0, 2)
 	hintBlock := hintStyle.Render(line2)
 
-	return inputBlock + "\n" + hintBlock + "\n"
-}
+	// 状态栏占用输入区原有的末尾空行：整块高度不变，layoutHeights 无需调整。
+	statusBlock := hintStyle.Render(renderStatusBar(snap, outputDir, innerW))
 
-// buildRightInfo xây dựng thông tin bên phải: nhà cung cấp · model(cửa sổ ngữ cảnh) · chi phí · thư mục.
-// Thông tin tiến độ như chương/số từ được hiển thị ở bảng "tổng quan" bên trái, không lặp lại ở đây.
-func buildRightInfo(snap host.UISnapshot, outputDir string) string {
-	var parts []string
-
-	if snap.Provider != "" {
-		parts = append(parts, snap.Provider)
-	}
-	if snap.ModelName != "" {
-		if w := formatContextWindow(snap.ModelContextWindow); w != "" {
-			parts = append(parts, snap.ModelName+"("+w+")")
-		} else {
-			parts = append(parts, snap.ModelName)
-		}
-	}
-	if cost := formatCostUSD(snap.TotalCostUSD); cost != "" {
-		parts = append(parts, cost)
-	}
-	if outputDir != "" {
-		parts = append(parts, "./"+filepath.Base(outputDir))
-	}
-
-	if len(parts) == 0 {
-		return lipgloss.NewStyle().Foreground(colorDim).Render("READY")
-	}
-	return lipgloss.NewStyle().Foreground(colorDim).Render(strings.Join(parts, " · "))
+	return inputBlock + "\n" + hintBlock + "\n" + statusBlock
 }
 
 func joinInlineSides(left, right string, width int) string {

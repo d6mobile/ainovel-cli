@@ -32,7 +32,7 @@ func TestContextToolInjectsStyleStats(t *testing.T) {
 		t.Fatalf("Save progress: %v", err)
 	}
 
-	tool := NewContextTool(st, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(st, References{}, "default")
 	args, _ := json.Marshal(map[string]any{"chapter": 7})
 	raw, err := tool.Execute(context.Background(), args)
 	if err != nil {
@@ -89,7 +89,7 @@ func TestContextToolReportsWarningsForCorruptedState(t *testing.T) {
 		t.Fatalf("write progress.json: %v", err)
 	}
 
-	tool := NewContextTool(store, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(store, References{}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 2})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -229,7 +229,7 @@ func TestContextToolChapterModeIncludesWorkingAndReferenceFields(t *testing.T) {
 		Consistency:      "一致性检查",
 		HookTechniques:   "钩子技巧",
 		QualityChecklist: "质量清单",
-	}, "default", rules.LoadOptions{})
+	}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 2})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -275,6 +275,15 @@ func TestContextToolArchitectModeIncludesPlanningAndFoundation(t *testing.T) {
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Init("test", 6); err != nil {
+		t.Fatalf("InitProgress: %v", err)
+	}
+	if err := s.Progress.SetLayered(true); err != nil {
+		t.Fatalf("SetLayered: %v", err)
+	}
+	if err := s.Progress.UpdateVolumeArc(1, 1); err != nil {
+		t.Fatalf("UpdateVolumeArc: %v", err)
 	}
 	if err := s.Outline.SavePremise(`## 题材和基调
 群像冒险，偏冷峻史诗。
@@ -346,6 +355,11 @@ func TestContextToolArchitectModeIncludesPlanningAndFoundation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveLayeredOutline: %v", err)
 	}
+	if err := s.Summaries.SaveArcSummary(domain.ArcSummary{
+		Volume: 1, Arc: 1, Title: "启程", Summary: "队伍建立，但因真相分歧出现裂痕。", KeyEvents: []string{"队伍建立", "分歧浮现"},
+	}); err != nil {
+		t.Fatalf("SaveArcSummary: %v", err)
+	}
 	if err := s.Outline.SaveCompass(domain.StoryCompass{
 		EndingDirection: "揭开古老真相",
 		EstimatedScale:  "预计 3 卷",
@@ -367,7 +381,7 @@ func TestContextToolArchitectModeIncludesPlanningAndFoundation(t *testing.T) {
 		OutlineTemplate:   "大纲模板",
 		CharacterTemplate: "角色模板",
 		LongformPlanning:  "长篇规划",
-	}, "default", rules.LoadOptions{})
+	}, "default")
 	args, err := json.Marshal(map[string]any{})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -394,6 +408,7 @@ func TestContextToolArchitectModeIncludesPlanningAndFoundation(t *testing.T) {
 		"characters",
 		"layered_outline",
 		"skeleton_arcs",
+		"arc_summaries",
 		"compass",
 		"style_rules",
 		"references",
@@ -485,7 +500,7 @@ func TestContextToolSelectedMemoryRecallsStoryThreadsAndReviewLessons(t *testing
 		t.Fatalf("SaveReview: %v", err)
 	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(s, References{}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 2})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -532,18 +547,16 @@ func TestContextToolSelectedMemoryRecallsStoryThreadsAndReviewLessons(t *testing
 	}
 }
 
-// Phục bút treo quá lâu chưa thu hồi, dù không liên quan đến từ khóa chương hiện tại,
-// vẫn phải được bù vào story_threads theo tuổi tài khoản —
-// đây chính là điểm mù của cơ chế gọi lại theo độ liên quan
-// (những sợi treo riêng quá lâu nhưng không va chạm từ khóa ở chương này).
-// Phục bút mới đặt gần đây (tuổi tài khoản < ngưỡng) không được gắn nhầm nhãn "chưa thu hồi".
+// 久挂未回收的伏笔即使与当前章关键词无关，也应被账龄回填进 story_threads——
+// 这正是相关性召回的盲区（独自悬挂太久、却没在本章撞上关键词的那根线）。
+// 近期埋下的伏笔（账龄 < 阈值）不应被误标为"未回收"。
 func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	// Chủ đề chương hiện tại không liên quan đến bất kỳ phục bút nào, đảm bảo gọi lại theo liên quan trả về rỗng, chỉ còn bù theo tuổi tài khoản có hiệu lực.
+	// 当前章主题与所有伏笔都不沾边，确保相关性召回为空，只剩账龄回填生效。
 	if err := s.Outline.SaveOutline([]domain.OutlineEntry{
 		{Chapter: 50, Title: "瘟疫", CoreEvent: "林砚在城南医馆救治瘟疫病患", Scenes: []string{"熬药", "封锁街巷"}},
 	}); err != nil {
@@ -552,7 +565,7 @@ func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 	if err := s.Progress.Init("test", 60); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	// 6 mục đạt ngưỡng gọi lại; hai mục đầu có tuổi tài khoản ≥30 (treo lâu), bốn mục sau có tuổi tài khoản <30 (gần đây).
+	// 6 条满足召回阈值；前两条账龄 ≥30（久挂），后四条账龄 <30（近期）。
 	if err := s.World.SaveForeshadowLedger([]domain.ForeshadowEntry{
 		{ID: "ancient_seal", Description: "上古封印的裂隙", PlantedAt: 3, Status: "planted"},
 		{ID: "lost_bloodline", Description: "主角失落的血脉来历", PlantedAt: 5, Status: "advanced"},
@@ -564,7 +577,7 @@ func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 		t.Fatalf("SaveForeshadowLedger: %v", err)
 	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(s, References{}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 50})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -583,7 +596,7 @@ func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 
-	// Hai phục bút treo lâu phải được bù vào, kèm chú thích tuổi tài khoản "未回收".
+	// 两条久挂伏笔应被回填，且带"未回收"账龄标注。
 	if !containsRecallSummary(payload.Selected.StoryThreads, "上古封印的裂隙") {
 		t.Fatalf("expected aging foreshadow to surface despite no relevance, got %+v", payload.Selected.StoryThreads)
 	}
@@ -593,7 +606,7 @@ func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 	if !containsRecallSummary(payload.Selected.StoryThreads, "未回收") {
 		t.Fatalf("expected aging item to carry overdue annotation, got %+v", payload.Selected.StoryThreads)
 	}
-	// Phục bút gần đây (tuổi tài khoản <30 và không liên quan) không được bù vào.
+	// 近期伏笔（账龄 <30 且不相关）不应被回填。
 	if containsRecallSummary(payload.Selected.StoryThreads, "昨夜集市的口角") {
 		t.Fatalf("recent foreshadow must not be labeled overdue, got %+v", payload.Selected.StoryThreads)
 	}
@@ -626,7 +639,7 @@ func TestContextToolSelectedMemoryIncludesGlobalReviewLessons(t *testing.T) {
 		t.Fatalf("SaveReview(global): %v", err)
 	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(s, References{}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 2})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -671,7 +684,7 @@ func TestContextToolKeepsFullForeshadowWhenRecallNotTriggered(t *testing.T) {
 		t.Fatalf("SaveForeshadowLedger: %v", err)
 	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(s, References{}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 2})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -719,7 +732,7 @@ func TestContextToolFallsBackToFullForeshadowWhenSelectionIsTooSparse(t *testing
 		t.Fatalf("SaveForeshadowLedger: %v", err)
 	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(s, References{}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 2})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -780,7 +793,7 @@ func TestContextToolInjectsRewriteBriefForPendingRewriteChapter(t *testing.T) {
 		t.Fatalf("SaveReview: %v", err)
 	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(s, References{}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 2})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -822,7 +835,7 @@ func TestContextToolOmitsRewriteBriefForNormalChapter(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(s, References{}, "default")
 	args, err := json.Marshal(map[string]any{"chapter": 2})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -841,7 +854,9 @@ func TestContextToolOmitsRewriteBriefForNormalChapter(t *testing.T) {
 	}
 }
 
-func TestContextToolInjectsUserDirectivesOnBothPaths(t *testing.T) {
+func TestContextToolDoesNotInjectUserDirectives(t *testing.T) {
+	// save_directive 已移除：novel_context 不再注入 working_memory.user_directives，
+	// 长期写作要求统一走 user_rules。锁死这条，防止回归。
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
@@ -850,11 +865,8 @@ func TestContextToolInjectsUserDirectivesOnBothPaths(t *testing.T) {
 	if err := s.Progress.Init("test", 3); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	if _, err := s.Directives.Add(domain.UserDirective{Text: "对话占比提高", Chapter: 2, TotalChapters: 3}); err != nil {
-		t.Fatalf("AddDirective: %v", err)
-	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
+	tool := NewContextTool(s, References{}, "default")
 	for name, chapter := range map[string]int{"writer": 1, "architect": 0} {
 		args, _ := json.Marshal(map[string]any{"chapter": chapter})
 		result, err := tool.Execute(context.Background(), args)
@@ -869,50 +881,58 @@ func TestContextToolInjectsUserDirectivesOnBothPaths(t *testing.T) {
 		if !ok {
 			t.Fatalf("[%s] missing working_memory", name)
 		}
-		directives, ok := working["user_directives"].([]any)
-		if !ok || len(directives) != 1 {
-			t.Fatalf("[%s] expected 1 directive, got %v", name, working["user_directives"])
+		if _, exists := working["user_directives"]; exists {
+			t.Errorf("[%s] working_memory 不应再有 user_directives（已统一到 user_rules）", name)
 		}
-		entry, _ := directives[0].(map[string]any)
-		if entry["text"] != "对话占比提高" || entry["at_chapter"] != float64(2) || entry["at_total_chapters"] != float64(3) {
-			t.Errorf("[%s] unexpected directive entry: %v", name, entry)
-		}
-		if _, hasCreatedAt := entry["created_at"]; hasCreatedAt {
-			t.Errorf("[%s] created_at là thông tin kiểm toán, không được truyền vào LLM", name)
+		// user_rules 仍应稳定注入
+		if _, ok := working["user_rules"].(map[string]any); !ok {
+			t.Errorf("[%s] working_memory.user_rules 应稳定注入", name)
 		}
 	}
 }
 
-func TestContextToolInjectsEmptyUserDirectives(t *testing.T) {
+// TestContextToolInjectsRuleViolations 违规事实管道契约(第五轮评审):
+// commit 落盘的机械违规必须经 novel_context(chapter=N) 真实注入——
+// editor.md §机械检查映射消费的就是这个字段,管道断了 prompt 就成空头支票。
+func TestContextToolInjectsRuleViolations(t *testing.T) {
 	dir := t.TempDir()
-	s := store.NewStore(dir)
-	if err := s.Init(); err != nil {
+	st := store.NewStore(dir)
+	if err := st.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	if err := s.Progress.Init("test", 3); err != nil {
-		t.Fatalf("InitProgress: %v", err)
+	if err := st.Progress.Save(&domain.Progress{TotalChapters: 3, Phase: domain.PhaseWriting}); err != nil {
+		t.Fatalf("progress: %v", err)
+	}
+	if err := st.World.SaveRuleViolations(2, []rules.Violation{
+		{Rule: "fatigue_words", Target: "不禁", Actual: 9, Severity: rules.SeverityWarning},
+	}); err != nil {
+		t.Fatalf("save violations: %v", err)
 	}
 
-	tool := NewContextTool(s, References{}, "default", rules.LoadOptions{})
-	args, _ := json.Marshal(map[string]any{"chapter": 0})
-	result, err := tool.Execute(context.Background(), args)
+	tool := NewContextTool(st, References{}, "default")
+	args, _ := json.Marshal(map[string]any{"chapter": 2})
+	raw, err := tool.Execute(context.Background(), args)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(result, &payload); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
+	var result map[string]any
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
-	working, ok := payload["working_memory"].(map[string]any)
-	if !ok {
-		t.Fatal("missing working_memory")
+	vs, ok := result["rule_violations"].([]any)
+	if !ok || len(vs) != 1 {
+		t.Fatalf("rule_violations 必须注入章节上下文, got %v", result["rule_violations"])
 	}
-	// Danh sách rỗng cũng inject [] (trường ổn định, theo tiền lệ user_rules), không được là null/thiếu
-	directives, ok := working["user_directives"].([]any)
-	if !ok {
-		t.Fatalf("expected stable empty array, got %T", working["user_directives"])
+
+	// 无违规章节:字段缺省(editor.md 约定)
+	args3, _ := json.Marshal(map[string]any{"chapter": 3})
+	raw3, err := tool.Execute(context.Background(), args3)
+	if err != nil {
+		t.Fatalf("Execute ch3: %v", err)
 	}
-	if len(directives) != 0 {
-		t.Errorf("expected empty list, got %v", directives)
+	var result3 map[string]any
+	_ = json.Unmarshal(raw3, &result3)
+	if _, has := result3["rule_violations"]; has {
+		t.Fatal("无违规章节不应带 rule_violations 字段")
 	}
 }

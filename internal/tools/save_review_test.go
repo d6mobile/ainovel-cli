@@ -306,3 +306,65 @@ func TestSaveReviewRejectsIssueWithoutEvidence(t *testing.T) {
 		t.Fatalf("expected issue evidence validation error, got %v", err)
 	}
 }
+
+// TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition 防回归：返工排空中途
+// （Flow=rewriting、PendingRewrites=[8,9]）对已重写章复审得到 polish 时，
+// SetFlow(polishing) 与 rewriting 构成非法迁移。修复前先写队列再切 Flow，会把
+// 队列脏写成 [8] 丢失第 9 章；修复后 SetFlow 先行，非法迁移时队列保持不变。
+func TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition(t *testing.T) {
+	s := store.NewStore(t.TempDir())
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Init("test", 10); err != nil {
+		t.Fatalf("Progress.Init: %v", err)
+	}
+	for _, ch := range []int{8, 9} {
+		if err := s.Progress.MarkChapterComplete(ch, 3000, "", ""); err != nil {
+			t.Fatalf("MarkChapterComplete(%d): %v", ch, err)
+		}
+	}
+	if err := s.Progress.SetPendingRewrites([]int{8, 9}, "返工"); err != nil {
+		t.Fatalf("SetPendingRewrites: %v", err)
+	}
+	if err := s.Progress.SetFlow(domain.FlowRewriting); err != nil {
+		t.Fatalf("SetFlow rewriting: %v", err)
+	}
+
+	tool := NewSaveReviewTool(s)
+	args, err := json.Marshal(map[string]any{
+		"chapter": 8,
+		"scope":   "chapter",
+		"dimensions": []map[string]any{
+			{"dimension": "consistency", "score": 85, "verdict": "pass", "comment": "基本一致"},
+			{"dimension": "character", "score": 82, "verdict": "pass", "comment": "人设稳定"},
+			{"dimension": "pacing", "score": 78, "verdict": "warning", "comment": "略慢"},
+			{"dimension": "continuity", "score": 84, "verdict": "pass", "comment": "连贯"},
+			{"dimension": "foreshadow", "score": 80, "verdict": "pass", "comment": "正常"},
+			{"dimension": "hook", "score": 76, "verdict": "warning", "comment": "钩子一般"},
+			{"dimension": "aesthetic", "score": 81, "verdict": "pass", "comment": "语言基本成立"},
+		},
+		"issues":            []map[string]any{},
+		"contract_status":   "partial",
+		"contract_misses":   []string{"漏项"},
+		"contract_notes":    "复审仍有漏项。",
+		"verdict":           "polish",
+		"summary":           "复审第 8 章需打磨。",
+		"affected_chapters": []int{8},
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "set flow") {
+		t.Fatalf("expected illegal flow transition error, got %v", err)
+	}
+
+	p, _ := s.Progress.Load()
+	if len(p.PendingRewrites) != 2 || p.PendingRewrites[0] != 8 || p.PendingRewrites[1] != 9 {
+		t.Fatalf("PendingRewrites 不应被脏写，期望 [8 9]，got %v", p.PendingRewrites)
+	}
+	if p.Flow != domain.FlowRewriting {
+		t.Fatalf("Flow 应保持 rewriting，got %s", p.Flow)
+	}
+}

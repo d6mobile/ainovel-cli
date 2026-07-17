@@ -95,13 +95,18 @@ func formatNumber(n int) string {
 	return string(result)
 }
 
+// truncate 按视觉宽度截断（中文算 2 列），超宽时以"..."收尾。
+// 不能按 rune 数截：纯中文行会溢出近一倍列宽，被外层 viewport 贴边硬裁，
+// 连省略号一起裁掉，用户看到的就是"文本贴边截断、不换行"。
 func truncate(s string, max int) string {
-	runes := []rune(s)
-	if len(runes) <= max {
+	if max <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= max {
 		return s
 	}
 	if max < 4 {
-		return string(runes[:max])
+		return truncateWidth(s, max)
 	}
-	return string(runes[:max-3]) + "..."
+	return truncateWidth(s, max-3) + "..."
 }

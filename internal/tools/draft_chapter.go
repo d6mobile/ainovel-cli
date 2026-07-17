@@ -70,6 +70,9 @@ func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (jso
 	if err := t.store.Progress.ValidateChapterWork(a.Chapter); err != nil {
 		return nil, err
 	}
+	if err := EnsureChapterExpanded(t.store, a.Chapter); err != nil {
+		return nil, err
+	}
 	if t.store.Progress.IsChapterCompleted(a.Chapter) {
 		// Luồng chỉnh sửa/viết lại: chương đã hoàn thành nhưng vẫn còn trong pending_rewrites, cho phép ghi đè bản nháp
 		progress, _ := t.store.Progress.Load()

@@ -12,7 +12,7 @@ import (
 
 const configDirName = ".ainovel"
 
-// DefaultConfigPath trả về đường dẫn file cấu hình toàn cục ~/.ainovel/config.json.
+// DefaultConfigPath 返回全局配置文件路径 ~/.ainovel/config.json。
 func DefaultConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -21,8 +21,8 @@ func DefaultConfigPath() string {
 	return filepath.Join(home, configDirName, "config.json")
 }
 
-// DefaultConfigDir trả về đường dẫn thư mục ~/.ainovel; trả về chuỗi rỗng nếu không lấy được thư mục home.
-// Chỉ dùng để đọc/ghi các file không bắt buộc tồn tại (như cache model), không tự động tạo thư mục.
+// DefaultConfigDir 返回 ~/.ainovel 目录路径；取不到家目录时返回空字符串。
+// 仅用于读/写不强制存在的文件（如模型缓存），不会自动创建目录。
 func DefaultConfigDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -31,7 +31,7 @@ func DefaultConfigDir() string {
 	return filepath.Join(home, configDirName)
 }
 
-// configDir trả về đường dẫn thư mục ~/.ainovel, tạo mới nếu chưa tồn tại.
+// configDir 返回 ~/.ainovel 目录路径，不存在时创建。
 func configDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -44,61 +44,62 @@ func configDir() (string, error) {
 	return dir, nil
 }
 
-// projectConfigPath trả về đường dẫn tương đối của file cấu hình cấp dự án ./.ainovel/config.json.
-// Thư mục dotdir cấp dự án phản chiếu ~/.ainovel/ toàn cục, dùng lại cùng configDirName; phân giải tương đối theo cwd.
+// projectConfigPath 返回项目级配置文件的相对路径 ./.ainovel/config.json。
+// 项目级 dotdir 镜像全局 ~/.ainovel/，复用同一个 configDirName；相对 cwd 解析。
 func projectConfigPath() string {
 	return filepath.Join(configDirName, "config.json")
 }
 
-// LoadConfig tải và hợp nhất cấu hình theo thứ tự ưu tiên:
-//  1. ~/.ainovel/config.json (toàn cục)
-//  2. ./.ainovel/config.json (ghi đè cấp dự án)
-//  3. Đường dẫn chỉ định bởi flagPath (ưu tiên cao nhất)
-func LoadConfig(flagPath string) (Config, error) {
+// EffectiveConfigPath 返回 TUI 改动（/config、/model）应写回的配置文件：
+// 项目目录有 ./.ainovel/config.json 就写它——与读取时项目层覆盖全局的方向一致，
+// 保证"改当前生效的那份"、改完立刻生效；否则写全局 ~/.ainovel/config.json。
+// 仅编辑已存在的项目配置，不会凭空创建（创建项目覆盖是用户主动放文件的动作）。
+func EffectiveConfigPath() string {
+	rel := projectConfigPath()
+	if _, err := os.Stat(rel); err == nil {
+		if abs, err := filepath.Abs(rel); err == nil {
+			return abs
+		}
+		return rel
+	}
+	return DefaultConfigPath()
+}
+
+// LoadConfig 按优先级加载并合并配置：
+//  1. ~/.ainovel/config.json（全局）
+//  2. ./.ainovel/config.json（项目级覆盖）
+func LoadConfig() (Config, error) {
 	var cfg Config
 
-	// 1. Cấu hình toàn cục. Đây là nền tảng ưu tiên thấp nhất; file lỗi sẽ giáng cấp thành
-	//    cảnh báo thay vì chặn — có thể bị ghi đè bởi cấp dự án / --config;
-	//    lỗi cứng sẽ chặn người dùng có "cấu hình toàn cục lỗi + --config hợp lệ",
-	//    vi phạm ngữ nghĩa "tôi chỉ định rõ ràng cái này" của --config.
+	// 1. 全局配置。它是最低优先级基底，坏文件降级为告警而非阻断——可被项目级覆盖；
+	//    硬失败会把"坏全局 + 有效项目配置"的用户挡在门外。
 	if p := DefaultConfigPath(); p != "" {
 		global, found, err := loadOptionalJSON(p)
 		switch {
 		case err != nil:
-			slog.Warn("Cấu hình toàn cục phân tích thất bại, đã bỏ qua (có thể bị ghi đè bởi cấp dự án/--config)", "module", "config", "path", p, "err", err)
+			slog.Warn("全局配置解析失败，已忽略（可被项目级覆盖）", "module", "config", "path", p, "err", err)
 		case found:
 			cfg = global
 		}
 	}
 
-	// 2. Ghi đè cấp dự án. File lỗi sẽ fail loud: người dùng chủ động đặt cấu hình
-	//    trong thư mục hiện tại, nuốt im lặng sẽ khiến "đã cấu hình nhưng không có hiệu lực"
-	//    không thể truy vết (issue #37).
+	// 2. 项目级覆盖。坏文件 fail loud：用户在当前目录主动放的配置，静默吞掉会让
+	//    "配了不生效"无从排查（issue #37）。
 	project, found, err := loadOptionalJSON(projectConfigPath())
 	if err != nil {
-		return cfg, fmt.Errorf("cấu hình cấp dự án ./.ainovel/config.json phân tích thất bại (vui lòng kiểm tra cú pháp JSON): %w", err)
+		return cfg, fmt.Errorf("项目级配置 ./.ainovel/config.json 解析失败（请检查 JSON 语法）: %w", err)
 	}
 	if found {
 		cfg = mergeConfig(cfg, project)
 	}
 
-	// 3. Ghi đè từ CLI flag
-	if flagPath != "" {
-		override, err := loadJSONFile(flagPath)
-		if err != nil {
-			return cfg, fmt.Errorf("load config %s: %w", flagPath, err)
-		}
-		cfg = mergeConfig(cfg, override)
-	}
-
 	return cfg, nil
 }
 
-// loadOptionalJSON đọc một file cấu hình tùy chọn:
-//   - File không tồn tại → (zero, false, nil), để bên gọi quyết định dùng giá trị mặc định/cấp trên
-//   - File tồn tại nhưng phân tích thất bại → trả về lỗi (không còn nuốt im lặng — nếu không
-//     cấu hình của người dùng "đã cấu hình nhưng không có hiệu lực" mà không thể truy vết,
-//     đây chính là nguyên nhân gốc rễ của issue #37)
+// loadOptionalJSON 读取一个可选的配置文件：
+//   - 文件不存在 → (zero, false, nil)，由调用方决定用默认/上层值
+//   - 文件存在但解析失败 → 返回错误（不再静默吞掉——否则用户的配置"配了不生效"
+//     却无从排查，正是 issue #37 的根因）
 func loadOptionalJSON(path string) (Config, bool, error) {
 	cfg, err := loadJSONFile(path)
 	if err != nil {
@@ -110,14 +111,14 @@ func loadOptionalJSON(path string) (Config, bool, error) {
 	return cfg, true, nil
 }
 
-// LoadConfigFile đọc một file cấu hình JSON đơn lẻ, hỗ trợ chú thích dòng //.
-// Không thực hiện hợp nhất, chỉ trả về cấu hình của file đó. Trả về lỗi nếu file không tồn tại.
+// LoadConfigFile 读取单个 JSON 配置文件，支持 // 行注释。
+// 不做任何合并，仅返回该文件自身的配置。文件不存在时返回错误。
 func LoadConfigFile(path string) (Config, error) {
 	return loadJSONFile(path)
 }
 
-// loadJSONFile đọc file cấu hình JSON, hỗ trợ chú thích dòng //.
-// Trả về lỗi nếu file không tồn tại (để bên gọi quyết định có bỏ qua hay không).
+// loadJSONFile 读取 JSON 配置文件，支持 // 行注释。
+// 文件不存在时返回错误（由调用方决定是否忽略）。
 func loadJSONFile(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -131,13 +132,16 @@ func loadJSONFile(path string) (Config, error) {
 	return cfg, nil
 }
 
-// mergeConfig hợp nhất overlay vào base. Các trường có giá trị khác zero sẽ ghi đè, map hợp nhất theo key.
+// mergeConfig 将 overlay 合并到 base 上。非零值字段覆盖，map 按 key 合并。
 func mergeConfig(base, overlay Config) Config {
 	if overlay.Provider != "" {
 		base.Provider = overlay.Provider
 	}
 	if overlay.ModelName != "" {
 		base.ModelName = overlay.ModelName
+	}
+	if overlay.ReasoningEffort != "" {
+		base.ReasoningEffort = overlay.ReasoningEffort
 	}
 	if overlay.Style != "" {
 		base.Style = overlay.Style
@@ -146,7 +150,7 @@ func mergeConfig(base, overlay Config) Config {
 		base.ContextWindow = overlay.ContextWindow
 	}
 
-	// Providers: key của overlay ghi đè key cùng tên trong base
+	// Providers: overlay 的 key 覆盖 base 同名 key
 	if len(overlay.Providers) > 0 {
 		if base.Providers == nil {
 			base.Providers = make(map[string]ProviderConfig)
@@ -156,6 +160,9 @@ func mergeConfig(base, overlay Config) Config {
 			if v.Type != "" {
 				existing.Type = v.Type
 			}
+			if v.API != "" {
+				existing.API = v.API
+			}
 			if v.APIKey != "" {
 				existing.APIKey = v.APIKey
 			}
@@ -163,7 +170,7 @@ func mergeConfig(base, overlay Config) Config {
 				existing.BaseURL = v.BaseURL
 			}
 			if len(v.Models) > 0 {
-				existing.Models = append([]string(nil), v.Models...)
+				existing.Models = append([]ModelConfig(nil), v.Models...)
 			}
 			if len(v.ExtraBody) > 0 {
 				existing.ExtraBody = cloneMap(v.ExtraBody)
@@ -175,7 +182,7 @@ func mergeConfig(base, overlay Config) Config {
 		}
 	}
 
-	// Roles: key của overlay ghi đè key cùng tên trong base
+	// Roles: overlay 的 key 覆盖 base 同名 key
 	if len(overlay.Roles) > 0 {
 		if base.Roles == nil {
 			base.Roles = make(map[string]RoleConfig)
@@ -191,12 +198,14 @@ func mergeConfig(base, overlay Config) Config {
 			if len(v.Fallbacks) > 0 {
 				existing.Fallbacks = append([]ModelRef(nil), v.Fallbacks...)
 			}
+			if v.ReasoningEffort != "" {
+				existing.ReasoningEffort = v.ReasoningEffort
+			}
 			base.Roles[k] = existing
 		}
 	}
 
-	// Budget / Notify: ghi đè toàn bộ khối (ngân sách/cảnh báo cấp dự án là khai báo chính sách độc lập,
-	// không nối từng trường với toàn cục)
+	// Budget / Notify：整块覆盖（项目级预算/告警是独立政策声明，不与全局逐字段拼接）
 	if overlay.Budget != (BudgetConfig{}) {
 		base.Budget = overlay.Budget
 	}
@@ -218,8 +227,44 @@ func cloneMap(m map[string]any) map[string]any {
 	return c
 }
 
-// stripJSONComments loại bỏ các chú thích dòng // trong JSON, theo dõi trạng thái dấu ngoặc kép
-// để tránh xóa nhầm nội dung bên trong chuỗi.
+// CloneConfig 深拷贝配置中会在运行时修改的 map/slice，避免候选配置污染当前配置。
+func CloneConfig(cfg Config) Config {
+	clone := cfg
+	clone.Providers = make(map[string]ProviderConfig, len(cfg.Providers))
+	for name, pc := range cfg.Providers {
+		pc.Models = append([]ModelConfig(nil), pc.Models...)
+		pc.Extra = cloneMap(pc.Extra)
+		pc.ExtraBody = cloneMap(pc.ExtraBody)
+		clone.Providers[name] = pc
+	}
+	clone.Roles = make(map[string]RoleConfig, len(cfg.Roles))
+	for role, rc := range cfg.Roles {
+		rc.Fallbacks = append([]ModelRef(nil), rc.Fallbacks...)
+		clone.Roles[role] = rc
+	}
+	clone.Notify.Events = append([]string(nil), cfg.Notify.Events...)
+	return clone
+}
+
+// SaveProviderConfig 补丁式更新目标配置层里单个 provider 的凭证与模型库。
+// 只动 providers 段，绝不触碰顶层 provider/model 选择——“当前用哪个”归 /model。
+// 目标不存在时创建最小配置；目标损坏时拒绝覆盖。
+func SaveProviderConfig(path string, provider string, pc ProviderConfig) error {
+	target, found, err := loadOptionalJSON(path)
+	if err != nil {
+		return err
+	}
+	if !found {
+		target = Config{}
+	}
+	if target.Providers == nil {
+		target.Providers = make(map[string]ProviderConfig)
+	}
+	target.Providers[provider] = pc
+	return SaveConfig(path, target)
+}
+
+// stripJSONComments 去除 JSON 中的 // 行注释，跟踪引号状态避免误删字符串内容。
 func stripJSONComments(data []byte) []byte {
 	out := make([]byte, 0, len(data))
 	inString := false
@@ -244,16 +289,16 @@ func stripJSONComments(data []byte) []byte {
 			continue
 		}
 
-		// Không nằm trong chuỗi
+		// 不在字符串内
 		if b == '"' {
 			inString = true
 			out = append(out, b)
 			continue
 		}
 
-		// Phát hiện chú thích //
+		// 检测 // 注释
 		if b == '/' && i+1 < len(data) && data[i+1] == '/' {
-			// Bỏ qua đến cuối dòng
+			// 跳到行尾
 			for i < len(data) && data[i] != '\n' {
 				i++
 			}
@@ -269,10 +314,9 @@ func stripJSONComments(data []byte) []byte {
 	return out
 }
 
-// WriteStartupError ghi nối tiếp lỗi nghiêm trọng trong giai đoạn khởi động vào ~/.ainovel/last-error.log,
-// và trả về đường dẫn file đó (best-effort, trả về chuỗi rỗng nếu thất bại). Khi khởi động bằng
-// cách nhấp đúp, cửa sổ console sẽ đóng ngay khi tiến trình kết thúc khiến lỗi thoáng hiện rồi biến mất,
-// ghi xuống đĩa là cách duy nhất để người dùng truy vết sau đó.
+// WriteStartupError 把启动期致命错误追加写入 ~/.ainovel/last-error.log，并返回
+// 该文件路径（best-effort，失败时返回空字符串）。双击启动时控制台窗口会随进程
+// 退出立即关闭、错误一闪而过，落盘是这类用户事后追溯的唯一途径。
 func WriteStartupError(msg string) string {
 	dir := DefaultConfigDir()
 	if dir == "" {
@@ -293,7 +337,7 @@ func WriteStartupError(msg string) string {
 	return path
 }
 
-// SaveConfig ghi cấu hình vào đường dẫn chỉ định (định dạng JSON, căn lề đẹp).
+// SaveConfig 将配置写入指定路径（JSON 格式，缩进美化）。
 func SaveConfig(path string, cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -302,5 +346,33 @@ func SaveConfig(path string, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		_ = tmp.Close()
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }

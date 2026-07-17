@@ -6,8 +6,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/voocel/agentcore"
 	"github.com/voocel/ainovel-cli/internal/host"
 )
+
+type modelRuntime interface {
+	ConfiguredProviders() []string
+	ConfiguredModelOptions(provider string) []host.ConfiguredModel
+	CurrentModelSelection(role string) (string, string, bool)
+	AvailableThinking(role string) []agentcore.ThinkingLevel
+	CurrentThinking(role string) string
+	SwitchModel(role, provider, model string) error
+	SetRoleThinking(role, level string) error
+}
 
 type modelSwitchFocus int
 
@@ -24,34 +35,54 @@ type modelRoleOption struct {
 }
 
 var modelRoleOptions = []modelRoleOption{
-	{Key: "default", Label: "Mặc định"},
-	{Key: "coordinator", Label: "Coordinator"},
+	{Key: "default", Label: "默认"},
+
 	{Key: "architect", Label: "Architect"},
 	{Key: "writer", Label: "Writer"},
 	{Key: "editor", Label: "Editor"},
 }
 
-// thinkingOptions là các mức cường độ suy nghĩ có thể chọn trong bảng /model. Key là giá trị mức của agentcore.
-// Rỗng = kế thừa (không gửi thinking, dùng mặc định của model/provider); off = tắt suy nghĩ tường minh (chỉ
-// có ý nghĩa với các model mặc định có suy nghĩ như GLM-5.x/deepseek-reasoner, provider hỗ trợ sẽ gửi disabled).
-var thinkingOptions = []struct{ Key, Label string }{
-	{"", "Mặc định (kế thừa)"},
-	{"off", "Tắt"},
-	{"minimal", "Tối thiểu"},
-	{"low", "Thấp"},
-	{"medium", "Trung bình"},
-	{"high", "Cao"},
-	{"xhigh", "Rất cao"},
+type thinkingOption struct{ Key, Label string }
+
+var allThinkingOptions = []thinkingOption{
+	{"", "默认(继承)"},
+	{"off", "关闭"},
+	{"low", "低"},
+	{"medium", "中"},
+	{"high", "高"},
+	{"xhigh", "极高"},
+	{"max", "最高"},
 }
 
-func thinkingIndexOf(level string) int {
+func thinkingOptionsFor(rt modelRuntime, role string) []thinkingOption {
+	levels := rt.AvailableThinking(role)
+	if len(levels) == 0 {
+		return []thinkingOption{allThinkingOptions[0]}
+	}
+	out := make([]thinkingOption, 0, len(levels))
+	for _, level := range levels {
+		key := string(level)
+		for _, option := range allThinkingOptions {
+			if option.Key == key {
+				out = append(out, option)
+				break
+			}
+		}
+	}
+	if len(out) == 0 {
+		return []thinkingOption{allThinkingOptions[0]}
+	}
+	return out
+}
+
+func thinkingIndexOf(options []thinkingOption, level string) int {
 	level = strings.ToLower(strings.TrimSpace(level))
-	for i, o := range thinkingOptions {
+	for i, o := range options {
 		if o.Key == level {
 			return i
 		}
 	}
-	return 0 // Giá trị không xác định → kế thừa
+	return 0 // 未知值 → 继承
 }
 
 type modelSwitchState struct {
@@ -61,16 +92,20 @@ type modelSwitchState struct {
 	modelIdx    int
 	thinkingIdx int
 	providers   []string
-	models      []string
-	message     string
+	models      []host.ConfiguredModel
+	thinking    []thinkingOption
+	// initialThinkingKey 记录面板打开时该角色强度字段的初始选中值。仅当用户实际移动了
+	// 该字段才回写——存储的强度意图可能高于当前模型能力、面板无法呈现，不能因“没动”而误抹。
+	initialThinkingKey string
+	message            string
 }
 
-func newModelSwitchState(rt *host.Host, roleHint string) *modelSwitchState {
+func newModelSwitchState(rt modelRuntime, roleHint string) *modelSwitchState {
 	state := &modelSwitchState{
 		providers: rt.ConfiguredProviders(),
 	}
 	if len(state.providers) == 0 {
-		state.message = "Hiện không có provider khả dụng"
+		state.message = "当前没有可用 provider"
 	}
 
 	roleHint = normalizeRoleKey(roleHint)
@@ -88,7 +123,7 @@ func normalizeRoleKey(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case "", "default":
 		return "default"
-	case "coordinator", "architect", "writer", "editor":
+	case "architect", "writer", "editor":
 		return strings.ToLower(strings.TrimSpace(role))
 	default:
 		return ""
@@ -114,21 +149,32 @@ func (s *modelSwitchState) model() string {
 	if len(s.models) == 0 || s.modelIdx < 0 || s.modelIdx >= len(s.models) {
 		return ""
 	}
-	return s.models[s.modelIdx]
+	return s.models[s.modelIdx].Name
+}
+
+func (s *modelSwitchState) modelLabel() string {
+	if len(s.models) == 0 || s.modelIdx < 0 || s.modelIdx >= len(s.models) {
+		return ""
+	}
+	model := s.models[s.modelIdx]
+	if window := formatContextWindow(model.ContextWindow); window != "" {
+		return model.Name + " · " + window
+	}
+	return model.Name
 }
 
 func (s *modelSwitchState) thinkingKey() string {
-	if s.thinkingIdx < 0 || s.thinkingIdx >= len(thinkingOptions) {
+	if s.thinkingIdx < 0 || s.thinkingIdx >= len(s.thinking) {
 		return ""
 	}
-	return thinkingOptions[s.thinkingIdx].Key
+	return s.thinking[s.thinkingIdx].Key
 }
 
 func (s *modelSwitchState) thinkingLabel() string {
-	if s.thinkingIdx < 0 || s.thinkingIdx >= len(thinkingOptions) {
-		return thinkingOptions[0].Label
+	if s.thinkingIdx < 0 || s.thinkingIdx >= len(s.thinking) {
+		return allThinkingOptions[0].Label
 	}
-	return thinkingOptions[s.thinkingIdx].Label
+	return s.thinking[s.thinkingIdx].Label
 }
 
 func (s *modelSwitchState) moveFocus(delta int) {
@@ -136,7 +182,7 @@ func (s *modelSwitchState) moveFocus(delta int) {
 	s.focus = modelSwitchFocus((int(s.focus) + delta + total) % total)
 }
 
-func (s *modelSwitchState) cycle(delta int, rt *host.Host) {
+func (s *modelSwitchState) cycle(delta int, rt modelRuntime) {
 	switch s.focus {
 	case modelFocusRole:
 		total := len(modelRoleOptions)
@@ -156,12 +202,15 @@ func (s *modelSwitchState) cycle(delta int, rt *host.Host) {
 		total := len(s.models)
 		s.modelIdx = (s.modelIdx + delta + total) % total
 	case modelFocusThinking:
-		total := len(thinkingOptions)
+		total := len(s.thinking)
+		if total == 0 {
+			return
+		}
 		s.thinkingIdx = (s.thinkingIdx + delta + total) % total
 	}
 }
 
-func (s *modelSwitchState) syncSelection(rt *host.Host) {
+func (s *modelSwitchState) syncSelection(rt modelRuntime) {
 	provider, model, _ := rt.CurrentModelSelection(s.role())
 	if len(s.providers) > 0 {
 		s.providerIdx = 0
@@ -173,41 +222,50 @@ func (s *modelSwitchState) syncSelection(rt *host.Host) {
 		}
 	}
 	s.syncModels(rt, model)
-	s.thinkingIdx = thinkingIndexOf(rt.CurrentThinking(s.role()))
+	s.syncThinking(rt)
 	s.message = ""
 }
 
-func (s *modelSwitchState) syncModels(rt *host.Host, preferred string) {
-	s.models = rt.ConfiguredModels(s.provider())
+func (s *modelSwitchState) syncModels(rt modelRuntime, preferred string) {
+	s.models = rt.ConfiguredModelOptions(s.provider())
 	s.modelIdx = 0
 	if len(s.models) == 0 {
 		return
 	}
 	preferred = strings.TrimSpace(preferred)
 	for i, model := range s.models {
-		if model == preferred {
+		if model.Name == preferred {
 			s.modelIdx = i
 			return
 		}
 	}
 }
 
-func (s *modelSwitchState) apply(rt *host.Host) error {
+func (s *modelSwitchState) syncThinking(rt modelRuntime) {
+	s.thinking = thinkingOptionsFor(rt, s.role())
+	s.thinkingIdx = thinkingIndexOf(s.thinking, rt.CurrentThinking(s.role()))
+	s.initialThinkingKey = s.thinkingKey()
+}
+
+func (s *modelSwitchState) apply(rt modelRuntime) error {
 	if len(s.providers) == 0 {
-		return fmt.Errorf("hiện không có provider khả dụng")
+		return fmt.Errorf("当前没有可用 provider")
 	}
 	if len(s.models) == 0 {
-		return fmt.Errorf("provider %q chưa có model nào được cấu hình", s.provider())
+		return fmt.Errorf("provider %q 没有已配置模型", s.provider())
 	}
+	wantThinking := s.thinkingKey()
 	if err := rt.SwitchModel(s.role(), s.provider(), s.model()); err != nil {
 		return err
 	}
-	// Cường độ suy nghĩ độc lập với model: chỉ áp dụng khi khác giá trị hiện tại, tránh lưu/sự kiện thừa.
-	if want := s.thinkingKey(); want != strings.ToLower(strings.TrimSpace(rt.CurrentThinking(s.role()))) {
-		if err := rt.SetRoleThinking(s.role(), want); err != nil {
+	// 推理强度与模型正交：仅当用户实际移动了强度字段才回写，避免把面板无法呈现的
+	// 高意图（当前模型能力不足）误抹成初始默认值。
+	if wantThinking != s.initialThinkingKey {
+		if err := rt.SetRoleThinking(s.role(), wantThinking); err != nil {
 			return err
 		}
 	}
+	s.syncThinking(rt)
 	return nil
 }
 
@@ -253,16 +311,16 @@ func renderModelSwitchBar(width int, state *modelSwitchState) string {
 	title := lipgloss.NewStyle().
 		Foreground(colorMuted).
 		Bold(true).
-		Render("/model Chuyển model")
+		Render("/model 切换模型")
 
-	row1 := renderModelField("Vai trò", state.roleLabel(), state.focus == modelFocusRole)
+	row1 := renderModelField("角色", state.roleLabel(), state.focus == modelFocusRole)
 	row2 := renderModelField("Provider", state.provider(), state.focus == modelFocusProvider)
-	row3 := renderModelField("Model", state.model(), state.focus == modelFocusModel)
-	row4 := renderModelField("Suy nghĩ", state.thinkingLabel(), state.focus == modelFocusThinking)
+	row3 := renderModelField("模型", state.modelLabel(), state.focus == modelFocusModel)
+	row4 := renderModelField("推理强度", state.thinkingLabel(), state.focus == modelFocusThinking)
 	hint := lipgloss.NewStyle().
 		Foreground(colorDim).
 		Italic(true).
-		Render("Tab chuyển trường   ←→ chuyển lựa chọn   Enter áp dụng   Esc hủy")
+		Render("Tab 切字段   ←→ 切选项   Enter 应用   Esc 取消")
 	lines := []string{
 		row1,
 		row2,
@@ -313,7 +371,7 @@ func renderModelSwitchBar(width int, state *modelSwitchState) string {
 
 func renderModelField(label, value string, focused bool) string {
 	if strings.TrimSpace(value) == "" {
-		value = "Chưa đặt"
+		value = "未设置"
 	}
 	labelText := lipgloss.NewStyle().
 		Foreground(colorMuted).

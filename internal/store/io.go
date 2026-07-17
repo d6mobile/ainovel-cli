@@ -97,6 +97,11 @@ func (io *IO) WriteMarkdown(rel string, content string) error {
 	return io.WriteFileUnlocked(rel, []byte(content))
 }
 
+// WriteMarkdownUnlocked 写出 .md sidecar。约定：每个 .md 都是对应 .json 的
+// best-effort 人类可读视图，绝非数据源——运行时与导出一律从 .json 重新渲染。
+// 各 Save 方法在同一写锁内先写 .json 再写此 .md，是两次独立的 tmp+rename；
+// 二者之间崩溃会留下 .md 落后于 .json，这是可接受的（无人把 .md 当数据读，
+// 下次写同一 scope 即自愈）。故意不为此加两文件原子提交——那是过度设计。
 func (io *IO) WriteMarkdownUnlocked(rel string, content string) error {
 	return io.WriteFileUnlocked(rel, []byte(content))
 }

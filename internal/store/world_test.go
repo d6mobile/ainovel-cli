@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/rules"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -77,6 +78,31 @@ func TestTimeline_Append(t *testing.T) {
 	}
 }
 
+func TestTimeline_AppendIsIdempotent(t *testing.T) {
+	s := newTestStore(t)
+	event := domain.TimelineEvent{
+		Chapter:    1,
+		Time:       "清晨",
+		Event:      "林墨入住客栈",
+		Characters: []string{"林墨", "老周"},
+	}
+	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{event}); err != nil {
+		t.Fatalf("append first: %v", err)
+	}
+	event.Characters = []string{"老周", "林墨"} // 角色顺序不应影响同一事件判定
+	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{event}); err != nil {
+		t.Fatalf("append duplicate: %v", err)
+	}
+
+	loaded, err := s.World.LoadTimeline()
+	if err != nil {
+		t.Fatalf("LoadTimeline: %v", err)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("duplicate timeline event should be ignored, got %d: %+v", len(loaded), loaded)
+	}
+}
+
 func TestTimeline_LoadRecent(t *testing.T) {
 	s := newTestStore(t)
 	_ = s.World.SaveTimeline([]domain.TimelineEvent{
@@ -128,6 +154,31 @@ func TestForeshadow_UpdateLifecycle(t *testing.T) {
 	active, _ := s.World.LoadActiveForeshadow()
 	if len(active) != 1 || active[0].ID != "f1" {
 		t.Errorf("active: want [f1], got %v", active)
+	}
+}
+
+func TestForeshadow_PlantIsIdempotent(t *testing.T) {
+	s := newTestStore(t)
+
+	_ = s.World.UpdateForeshadow(1, []domain.ForeshadowUpdate{
+		{ID: "f1", Action: "plant", Description: "黑影"},
+	})
+	_ = s.World.UpdateForeshadow(1, []domain.ForeshadowUpdate{
+		{ID: "f1", Action: "plant", Description: "黑影"},
+	})
+	_ = s.World.UpdateForeshadow(3, []domain.ForeshadowUpdate{
+		{ID: "f1", Action: "advance"},
+	})
+	_ = s.World.UpdateForeshadow(3, []domain.ForeshadowUpdate{
+		{ID: "f1", Action: "plant", Description: "黑影"},
+	})
+
+	all, _ := s.World.LoadForeshadowLedger()
+	if len(all) != 1 {
+		t.Fatalf("duplicate plant should not append entries, got %d: %+v", len(all), all)
+	}
+	if all[0].Status != "advanced" {
+		t.Fatalf("duplicate plant should not downgrade status, got %s", all[0].Status)
 	}
 }
 
@@ -190,6 +241,24 @@ func TestStateChanges_Append(t *testing.T) {
 	}
 	if loaded[1].NewValue != "筑基期" {
 		t.Errorf("second: %+v", loaded[1])
+	}
+}
+
+func TestStateChanges_AppendIsIdempotent(t *testing.T) {
+	s := newTestStore(t)
+	change := domain.StateChange{
+		Chapter:  1,
+		Entity:   "张三",
+		Field:    "realm",
+		OldValue: "凡人",
+		NewValue: "练气期",
+	}
+	_ = s.World.AppendStateChanges([]domain.StateChange{change})
+	_ = s.World.AppendStateChanges([]domain.StateChange{change})
+
+	loaded, _ := s.World.LoadStateChanges()
+	if len(loaded) != 1 {
+		t.Fatalf("duplicate state change should be ignored, got %d: %+v", len(loaded), loaded)
 	}
 }
 
@@ -295,5 +364,40 @@ func TestRenderWorldRules(t *testing.T) {
 	// Không có boundary thì không được render dòng boundary rỗng
 	if strings.Contains(md, "边界：\n") {
 		t.Error("empty boundary rendered")
+	}
+}
+
+// TestRuleViolationsContract 违规事实存储契约(第五轮评审):
+// 同章最新覆盖旧记录;重写后空列表视为已清;跨重启可读。
+func TestRuleViolationsContract(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	if err := s.World.SaveRuleViolations(3, []rules.Violation{
+		{Rule: "fatigue_words", Target: "不禁", Actual: 9, Severity: rules.SeverityWarning},
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if got := s.World.LoadRuleViolations(3); len(got) != 1 || got[0].Target != "不禁" {
+		t.Fatalf("首次读取: %+v", got)
+	}
+
+	// 同章重写:最新记录(空列表=已清)覆盖旧违规
+	if err := s.World.SaveRuleViolations(3, nil); err != nil {
+		t.Fatalf("save empty: %v", err)
+	}
+	if got := s.World.LoadRuleViolations(3); len(got) != 0 {
+		t.Fatalf("重写后旧违规应被清除: %+v", got)
+	}
+
+	// 其他章不受影响 + 跨重启(新 Store 实例)可读
+	if err := s.World.SaveRuleViolations(5, []rules.Violation{{Rule: "forbidden_phrases", Target: "某种程度上", Actual: 2, Severity: rules.SeverityWarning}}); err != nil {
+		t.Fatalf("save ch5: %v", err)
+	}
+	s2 := NewStore(dir)
+	if got := s2.World.LoadRuleViolations(5); len(got) != 1 || got[0].Rule != "forbidden_phrases" {
+		t.Fatalf("跨重启读取: %+v", got)
+	}
+	if got := s2.World.LoadRuleViolations(99); got != nil {
+		t.Fatalf("无记录章节应返回 nil: %+v", got)
 	}
 }

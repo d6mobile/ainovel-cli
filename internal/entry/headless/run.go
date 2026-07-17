@@ -23,9 +23,9 @@ type Options struct {
 	Stderr io.Writer
 }
 
-// Run chạy nhân phiên làm việc ở chế độ không giao diện, tiêu thụ trực tiếp các sự kiện Engine và đầu ra streaming.
-// Nếu sau này thêm các phương thức khởi động dùng chung như “tiếp tục viết tiểu thuyết có sẵn”,
-// không nên đưa thẳng vào đây mà hãy đưa vào internal/entry/startup, rồi để entry headless gọi lại.
+// Run 以无界面模式运行会话内核，直接消费 Engine 事件与流式输出。
+// 未来若新增“续写已有小说”等共享启动方式，不应直接堆到这里，
+// 而应先落到 internal/entry/startup，再由 headless 入口调用。
 func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 	stdout := opts.Stdout
 	if stdout == nil {
@@ -48,8 +48,8 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 	cleanup := logger.SetupFile(eng.Dir(), "headless.log", false)
 	defer cleanup()
 	defer eng.Close()
-	// Khi chạy xong hoặc trả về lỗi, xuất một bản chẩn đoán đã ẩn danh hóa để người dùng headless dễ báo issue.
-	// (Các trường hợp bị kill từ bên ngoài không đi qua defer, vẫn cần dùng /diag thủ công trong TUI.)
+	// 运行结束 / 出错返回时落一份脱敏诊断，方便 headless 用户贴 issue。
+	// （外部 kill 的挂死不走 defer，仍需在 TUI 里手动 /diag。）
 	defer func() { _, _ = diag.Export(store.NewStore(eng.Dir())) }()
 
 	prompt := strings.TrimSpace(opts.Prompt)
@@ -63,8 +63,12 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(stderr, "headless khởi động: %s\n", eng.Dir())
-		if err := eng.StartPrepared(plan.StartPrompt); err != nil {
+		fmt.Fprintf(stderr, "headless 启动: %s\n", eng.Dir())
+		// 启动侧确定性生成本书用户规则快照（用原始 prompt 归一化），须在 StartPrepared 前。
+		if err := eng.PrepareUserRules(plan.RawPrompt); err != nil {
+			return err
+		}
+		if err := eng.StartPrepared(plan.RawPrompt); err != nil {
 			return err
 		}
 	} else {
@@ -81,9 +85,9 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 			return err
 		}
 		if label == "" {
-			return fmt.Errorf("chế độ headless yêu cầu --prompt, hoặc thư mục đầu ra %q phải có phiên có thể khôi phục", eng.Dir())
+			return fmt.Errorf("headless 模式需要 --prompt，或输出目录 %q 下已有可恢复会话", eng.Dir())
 		}
-		fmt.Fprintf(stderr, "headless khôi phục: %s (%s)\n", eng.Dir(), label)
+		fmt.Fprintf(stderr, "headless 恢复: %s (%s)\n", eng.Dir(), label)
 		return consume(eng, stdout, stderr, roundHasContent)
 	}
 

@@ -7,22 +7,14 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/llm"
 	"github.com/voocel/ainovel-cli/internal/errs"
 )
 
-// Trong tình huống đầu ra dài + ctx dài, với nhà cung cấp hỗ trợ suy luận (mimo / deepseek-r1 v.v.)
-// nếu phía server không stream reasoning delta, toàn bộ SSE sẽ im lặng trong giai đoạn suy nghĩ.
-// litellm mặc định watchdog 2 phút, thường gây ngắt nhầm khi viết chương 8000 chữ.
-// 5 phút bao phủ hầu hết trường hợp thực tế (xem thống kê thời gian suy nghĩ plan→draft trong tasks/todo.md),
-// vẫn nhỏ hơn RequestTimeout 10 phút, đảm bảo thoát được khi mạng thực sự chết.
-const streamIdleTimeout = 5 * time.Minute
-
-// FailoverEvent biểu diễn một lần chuyển đổi nhà cung cấp tường minh.
-// Reason là nhãn ngắn (rate_limit / timeout / stream_idle / network), dùng cho log có cấu trúc.
+// FailoverEvent 表示一次显式 provider 切换。
+// Reason 为短标签（rate_limit / timeout / stream_idle / network），用于结构化日志。
 type FailoverEvent struct {
 	Role         string
 	Reason       string
@@ -33,7 +25,7 @@ type FailoverEvent struct {
 	Err          error
 }
 
-// FailoverReporter được gọi khi xảy ra chuyển đổi nhà cung cấp tường minh.
+// FailoverReporter 在发生显式切换时被调用。
 type FailoverReporter func(FailoverEvent)
 
 type modelTarget struct {
@@ -42,8 +34,8 @@ type modelTarget struct {
 	model    agentcore.ChatModel
 }
 
-// SwappableModel là wrapper ChatModel có thể hoán đổi nóng.
-// Các yêu cầu đã bắt đầu tiếp tục dùng instance cũ; các yêu cầu tiếp theo tự động chuyển sang instance mới.
+// SwappableModel 是可热切换的 ChatModel 包装器。
+// 已开始的请求继续使用旧实例；后续请求自动切到新实例。
 type SwappableModel struct {
 	*agentcore.SwappableModel
 	mu       sync.RWMutex
@@ -84,6 +76,13 @@ func (m *SwappableModel) Info() llm.ModelInfo {
 	}
 }
 
+func (m *SwappableModel) Capabilities() llm.Capabilities {
+	if cp, ok := m.SwappableModel.Current().(llm.CapabilityProvider); ok {
+		return cp.Capabilities()
+	}
+	return llm.Capabilities{}
+}
+
 func (m *SwappableModel) Swap(provider, name string, model agentcore.ChatModel) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -98,25 +97,30 @@ func (m *SwappableModel) Current() (provider, name string) {
 	return m.provider, m.name
 }
 
-// ModelSet lưu giữ các instance mô hình phân bổ theo vai trò; vai trò chưa cấu hình sẽ fallback về mô hình mặc định.
+// ModelSet 持有按角色分配的模型实例，未配置的角色回退到默认模型。
 type ModelSet struct {
+	mu        sync.RWMutex
 	Default   *SwappableModel
 	models    map[string]*SwappableModel
 	fallbacks map[string][]modelTarget
 	config    Config
 }
 
-// ForRole trả về mô hình cho vai trò chỉ định; trả về mô hình mặc định nếu chưa cấu hình.
+// ForRole 返回指定角色的模型，未配置时返回默认模型。
 func (ms *ModelSet) ForRole(role string) agentcore.ChatModel {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
 	if m, ok := ms.models[role]; ok {
 		return m
 	}
 	return ms.Default
 }
 
-// ForRoleWithFailover trả về mô hình vai trò có fallback cấp độ từng yêu cầu.
-// Chỉ có hiệu lực khi vai trò đó được cấu hình tường minh fallbacks; nếu không sẽ thoái hóa về mô hình thông thường.
+// ForRoleWithFailover 返回带有单次请求级 fallback 的角色模型。
+// 仅当该角色显式配置了 fallbacks 时生效；未配置时退化为普通模型。
 func (ms *ModelSet) ForRoleWithFailover(role string, report FailoverReporter) agentcore.ChatModel {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
 	primary, ok := ms.models[role]
 	if !ok {
 		return ms.Default
@@ -126,15 +130,14 @@ func (ms *ModelSet) ForRoleWithFailover(role string, report FailoverReporter) ag
 		return primary
 	}
 	return &failoverModel{
-		role:      role,
-		primary:   primary,
-		fallbacks: append([]modelTarget(nil), targets...),
-		report:    report,
+		role: role, primary: primary, set: ms, report: report,
 	}
 }
 
-// Summary trả về tóm tắt phân bổ mô hình (dùng cho log).
+// Summary 返回模型分配摘要（供日志使用）。
 func (ms *ModelSet) Summary() string {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
 	var parts []string
 	for role, m := range ms.models {
 		provider, name := m.Current()
@@ -148,9 +151,11 @@ func (ms *ModelSet) Summary() string {
 	return fmt.Sprintf("default=%s/%s %s", provider, name, strings.Join(parts, " "))
 }
 
-// CurrentSelection trả về provider/model đang có hiệu lực của vai trò.
-// Khi role rỗng hoặc là "default" thì trả về mô hình mặc định.
+// CurrentSelection 返回角色当前生效的 provider/model。
+// role 为空或 "default" 时返回默认模型。
 func (ms *ModelSet) CurrentSelection(role string) (provider, model string, explicit bool) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
 	if role == "" || role == "default" {
 		provider, model = ms.Default.Current()
 		return provider, model, true
@@ -163,20 +168,24 @@ func (ms *ModelSet) CurrentSelection(role string) (provider, model string, expli
 	return provider, model, false
 }
 
-// Swap chuyển đổi mô hình mặc định hoặc mô hình của vai trò chỉ định.
-// Khi role rỗng hoặc là "default" thì chuyển mô hình mặc định; các vai trò khác được ghi đè tường minh.
+// Swap 切换默认模型或指定角色模型。
+// role 为空或 "default" 时切换默认模型；其他角色切换为显式覆盖。
 func (ms *ModelSet) Swap(role, provider, model string) error {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 	pc, ok := ms.config.Providers[provider]
 	if !ok {
 		return fmt.Errorf("provider %q is not configured: %w", provider, errs.ErrConfig)
 	}
 	next, err := createModelFromConfig(provider, model, pc, make(map[string]agentcore.ChatModel))
 	if err != nil {
-		return fmt.Errorf("chuyển đổi mô hình thất bại: %w", err)
+		return fmt.Errorf("切换模型失败: %w", err)
 	}
 
 	if role == "" || role == "default" {
 		ms.Default.Swap(provider, model, next)
+		ms.config.Provider = provider
+		ms.config.ModelName = model
 		return nil
 	}
 
@@ -186,14 +195,62 @@ func (ms *ModelSet) Swap(role, provider, model string) error {
 
 	if existing, ok := ms.models[role]; ok {
 		existing.Swap(provider, model, next)
-		return nil
+	} else {
+		ms.models[role] = NewSwappableModel(provider, model, next)
 	}
-	ms.models[role] = NewSwappableModel(provider, model, next)
+	if ms.config.Roles == nil {
+		ms.config.Roles = make(map[string]RoleConfig)
+	}
+	rc := ms.config.Roles[role]
+	rc.Provider = provider
+	rc.Model = model
+	ms.config.Roles[role] = rc
 	return nil
 }
 
-// ModelName trích xuất tên mô hình hiện tại từ ChatModel; trả về chuỗi rỗng nếu thất bại.
-// Hỗ trợ hoán đổi nóng của SwappableModel: luôn trả về giá trị mới nhất tại thời điểm gọi.
+// ResolveContextWindow 使用 ModelSet 的最新配置解析窗口，供运行时热切换后的
+// ContextManagerFactory 使用，避免捕获启动时的 Config 副本。
+func (ms *ModelSet) ResolveContextWindow(provider, model string) (int, ContextWindowSource) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	return ms.config.ResolveContextWindow(provider, model)
+}
+
+// ApplyPrepared 提交一个已成功构建的候选 ModelSet。已有 SwappableModel 的地址
+// 保持不变，因此已装配的 Worker/Arbiter 会在下一次请求自动使用新客户端。
+func (ms *ModelSet) ApplyPrepared(candidate *ModelSet) {
+	if candidate == nil {
+		return
+	}
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	defaultProvider, defaultName := candidate.Default.Current()
+	ms.Default.Swap(defaultProvider, defaultName, candidate.Default.SwappableModel.Current())
+
+	nextModels := make(map[string]*SwappableModel, len(candidate.models))
+	for role, next := range candidate.models {
+		provider, name := next.Current()
+		if existing, ok := ms.models[role]; ok {
+			existing.Swap(provider, name, next.SwappableModel.Current())
+			nextModels[role] = existing
+		} else {
+			nextModels[role] = next
+		}
+	}
+	ms.models = nextModels
+	ms.fallbacks = candidate.fallbacks
+	ms.config = CloneConfig(candidate.config)
+}
+
+func (ms *ModelSet) fallbackTargets(role string) []modelTarget {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	return append([]modelTarget(nil), ms.fallbacks[role]...)
+}
+
+// ModelName 从 ChatModel 中提取当前模型名，失败返回空字符串。
+// 支持 SwappableModel 的热切换：调用时总是返回最新值。
 func ModelName(m agentcore.ChatModel) string {
 	if info, ok := m.(interface{ Info() llm.ModelInfo }); ok {
 		return info.Info().Name
@@ -201,12 +258,23 @@ func ModelName(m agentcore.ChatModel) string {
 	return ""
 }
 
-// NewModelSet tạo tập hợp đa mô hình từ cấu hình.
-// Các tổ hợp provider+model giống nhau sẽ tái sử dụng cùng một instance.
+// ModelProvider 从 ChatModel 中提取当前 provider 名称，失败返回空字符串。
+func ModelProvider(m agentcore.ChatModel) string {
+	if info, ok := m.(interface{ Info() llm.ModelInfo }); ok {
+		return info.Info().Provider
+	}
+	if provider, ok := m.(interface{ ProviderName() string }); ok {
+		return provider.ProviderName()
+	}
+	return ""
+}
+
+// NewModelSet 根据配置创建多模型集合。
+// 相同 provider+model 组合复用同一个实例。
 func NewModelSet(cfg Config) (*ModelSet, error) {
 	cache := make(map[string]agentcore.ChatModel)
 
-	// Tạo mô hình mặc định
+	// 创建默认模型
 	defaultPC := cfg.DefaultProviderConfig()
 	defaultModel, err := createModelFromConfig(cfg.Provider, cfg.ModelName, defaultPC, cache)
 	if err != nil {
@@ -220,7 +288,7 @@ func NewModelSet(cfg Config) (*ModelSet, error) {
 		config:    cfg,
 	}
 
-	// Tạo mô hình ghi đè theo vai trò
+	// 创建角色覆盖模型
 	for role, rc := range cfg.Roles {
 		pc, ok := cfg.Providers[rc.Provider]
 		if !ok {
@@ -231,7 +299,7 @@ func NewModelSet(cfg Config) (*ModelSet, error) {
 			return nil, fmt.Errorf("role %s model: %w", role, err)
 		}
 		ms.models[role] = NewSwappableModel(rc.Provider, rc.Model, m)
-		slog.Info("Phân bổ mô hình theo vai trò", "module", "config", "role", role, "provider", rc.Provider, "model", rc.Model)
+		slog.Info("角色模型分配", "module", "config", "role", role, "provider", rc.Provider, "model", rc.Model)
 		if len(rc.Fallbacks) == 0 {
 			continue
 		}
@@ -258,7 +326,7 @@ func NewModelSet(cfg Config) (*ModelSet, error) {
 	return ms, nil
 }
 
-// createModelFromConfig tạo hoặc tái sử dụng instance ChatModel.
+// createModelFromConfig 创建或复用 ChatModel 实例。
 func createModelFromConfig(providerKey, model string, pc ProviderConfig, cache map[string]agentcore.ChatModel) (agentcore.ChatModel, error) {
 	cacheKey := providerKey + "|" + model
 	if m, ok := cache[cacheKey]; ok {
@@ -267,14 +335,26 @@ func createModelFromConfig(providerKey, model string, pc ProviderConfig, cache m
 
 	providerType, err := pc.ProviderType(providerKey)
 	if err != nil {
-		return nil, fmt.Errorf("phân tích kiểu nhà cung cấp thất bại: %w", err)
+		return nil, fmt.Errorf("解析 provider 类型失败: %w", err)
+	}
+	providerExtra := cloneMap(pc.Extra)
+	if pc.API != "" {
+		if providerExtra == nil {
+			providerExtra = make(map[string]any, 1)
+		}
+		providerExtra["api"] = pc.API
+	}
+
+	streamIdle, err := pc.StreamIdleTimeoutValue()
+	if err != nil {
+		return nil, fmt.Errorf("provider %s stream_idle_timeout: %w: %w", providerKey, errs.ErrConfig, err)
 	}
 
 	m, err := llm.NewModel(providerType, model,
 		llm.WithAPIKey(pc.APIKey),
 		llm.WithBaseURL(pc.BaseURL),
-		llm.WithStreamIdleTimeout(streamIdleTimeout),
-		llm.WithProviderExtra(pc.Extra),
+		llm.WithStreamIdleTimeout(streamIdle),
+		llm.WithProviderExtra(providerExtra),
 		llm.WithExtra(pc.ExtraBody),
 	)
 	if err != nil {
@@ -285,10 +365,10 @@ func createModelFromConfig(providerKey, model string, pc ProviderConfig, cache m
 }
 
 type failoverModel struct {
-	role      string
-	primary   *SwappableModel
-	fallbacks []modelTarget
-	report    FailoverReporter
+	role    string
+	primary *SwappableModel
+	set     *ModelSet
+	report  FailoverReporter
 }
 
 func (m *failoverModel) Generate(ctx context.Context, messages []agentcore.Message, tools []agentcore.ToolSpec, opts ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
@@ -407,7 +487,11 @@ func (m *failoverModel) pickFallback(current modelTarget, err error) (modelTarge
 		return modelTarget{}, agentcore.FailoverReason(err), false
 	}
 	reason := agentcore.FailoverReason(err)
-	for _, target := range m.fallbacks {
+	var targets []modelTarget
+	if m.set != nil {
+		targets = m.set.fallbackTargets(m.role)
+	}
+	for _, target := range targets {
 		if target.provider == current.provider && target.name == current.name {
 			continue
 		}
