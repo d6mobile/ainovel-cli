@@ -1,26 +1,29 @@
-# Task 1 Report: Merge upstream/main
+# Task 1 Report — Host save path for general settings
 
-## What changed
-- Fetched latest `upstream/main` (`d1bbd8f` at fetch time) and merged it into `sync/upstream-52307da-vi` with `--no-commit`.
-- Resolved merge conflicts:
-  - Code/config/test conflicts were resolved toward upstream baseline to keep latest project code.
-  - Existing Vietnamese markdown/prompt surfaces were preserved for conflicted files; newly added upstream docs/prompts remain for Task 2 localization.
-  - Files deleted by upstream were removed.
-- Removed conflict markers and fixed trailing whitespace in `docs/chapter-advance-gate.md`.
-
-## Tests and checks
-- `git diff --name-only --diff-filter=U`: no unresolved conflicts.
-- Conflict marker grep over README/assets/docs/cmd/internal/config: no markers found.
-- `git diff --check --cached`: passed after whitespace fix.
-- `go test ./...`: not run because `go` is not installed in this environment (`/bin/bash: go: command not found`).
+## Status
+DONE
 
 ## Files changed
-- Upstream sync touched 236 files, including new engine/arbiter/eval/import pipeline packages, config model updates, TUI refactors, prompt/doc additions, and removal of upstream-deleted legacy files.
+- `internal/host/general_config.go`
+- `internal/host/general_config_test.go`
+- `.superpowers/sdd/task-1-report.md`
 
-## Self-review findings
-- The merge is structurally resolved and staged.
-- Existing Vietnamese content in conflicted markdown/prompt files was intentionally preserved; new upstream files still need Vietnamese localization in Task 2.
+## Commits
+- Pending at report write time; will commit as `feat: add general settings save path`
+
+## Tests run
+- `docker run --rm -v /mnt/Data/AI/ainovel-cli:/src -w /src golang:1.25 go test ./internal/host -run TestConfigureGeneralSettingsPersistsAndPreservesProviderConfig -v`
+  - Result: failed first as expected with `ConfigureGeneralSettings undefined` and `GeneralSettingsDraft undefined`.
+- `docker run --rm -v /mnt/Data/AI/ainovel-cli:/src -w /src golang:1.25 go test ./internal/host -run TestConfigureGeneralSettingsPersistsAndPreservesProviderConfig -v`
+  - Result: passed after implementation.
+- `docker run --rm -v /mnt/Data/AI/ainovel-cli:/src -w /src golang:1.25 go test ./internal/host -v`
+  - Result: passed.
+
+## Self-review
+- The new host method clones the current config, replaces only `Style`, `Budget`, and `Notify`, fills defaults, validates the full config, persists through the existing atomic save path, updates the in-memory config, and rebinds notifier/budget state.
+- Provider selection and provider/model contents remain unchanged in the save test.
+- The implementation keeps `h.cfg` consistent immediately after save, which matches the task requirement that `style` be reflected live for later reads.
 
 ## Concerns
-- Go tests could not be executed in this environment because Go is unavailable.
-- Task 2 must scan the whole tree for remaining Chinese/user-facing strings and translate new upstream content.
+- I did not drive the `/config` TUI surface in this task because that UI branch is not part of Task 1; this task only adds the host-side persistence path.
+- `docs/superpowers/plans/2026-07-18-config-general-settings-ui.md` exists as an untracked file in the working tree but was not modified for this task.
