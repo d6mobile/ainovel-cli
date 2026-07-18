@@ -20,6 +20,7 @@ Công cụ CLI sáng tác tiểu thuyết dài kỳ hoàn toàn tự động b�
    - [Build từ source](#build-từ-source)
 5. [Cấu hình](#cấu-hình)
    - [Ollama (local, miễn phí)](#ollama-local-miễn-phí)
+   - [DeepSeek](#deepseek)
    - [OpenRouter](#openrouter)
    - [Anthropic / OpenAI](#anthropic--openai)
    - [Cấu hình nhiều model theo vai trò](#cấu-hình-nhiều-model-theo-vai-trò)
@@ -203,6 +204,28 @@ ollama pull qwen3.5:27b     # Chất lượng cao hơn, cần RAM nhiều hơn
 
 ---
 
+### DeepSeek
+
+DeepSeek là provider API gốc, không cần wrapper thêm. Dùng khi muốn một provider API mặc định cho các vai chiến lược hoặc khi muốn phối hợp với model local trong cùng một run.
+
+```json
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "providers": {
+    "deepseek": {
+      "api_key": "sk-deepseek-...",
+      "models": [
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ]
+    }
+  }
+}
+```
+
+---
+
 ### OpenRouter
 
 Truy cập [openrouter.ai](https://openrouter.ai) để đăng ký API key. Hỗ trợ hầu hết model lớn (Gemini, Claude, GPT-4, v.v.).
@@ -246,29 +269,37 @@ Truy cập [openrouter.ai](https://openrouter.ai) để đăng ký API key. Hỗ
 
 ### Cấu hình nhiều model theo vai trò
 
-Dùng model mạnh cho Kiến trúc sư (lập đề cương), model nhanh cho Người viết (viết chương):
+Dùng model API mạnh cho Kiến trúc sư / Biên tập viên, model local cho Người viết khi muốn tiết kiệm chi phí và giữ tốc độ:
 
 ```json
 {
-  "provider": "openrouter",
-  "model": "google/gemini-2.5-flash",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
   "providers": {
-    "openrouter": {
-      "api_key": "sk-or-v1-...",
-      "base_url": "https://openrouter.ai/api/v1"
+    "deepseek": {
+      "api_key": "sk-deepseek-...",
+      "models": [
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ]
     },
-    "anthropic": {
-      "api_key": "sk-ant-..."
+    "ollama": {
+      "base_url": "http://host.docker.internal:11434/v1",
+      "models": [
+        "qwen3:14b",
+        "llama3.1:8b"
+      ]
     }
   },
   "roles": {
-    "coordinator": { "provider": "openrouter", "model": "google/gemini-2.5-flash" },
-    "architect":   { "provider": "anthropic",  "model": "claude-sonnet-4-6" },
-    "writer":      { "provider": "openrouter", "model": "google/gemini-2.5-flash" },
-    "editor":      { "provider": "openrouter", "model": "google/gemini-2.5-flash" }
+    "architect": { "provider": "deepseek", "model": "deepseek-reasoner" },
+    "writer":    { "provider": "ollama",   "model": "qwen3:14b" },
+    "editor":    { "provider": "deepseek", "model": "deepseek-chat" }
   }
 }
 ```
+
+Bạn có thể dùng cùng mẫu này cho các vai import nếu muốn tách local/API theo từng giai đoạn.
 
 ---
 
