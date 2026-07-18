@@ -35,15 +35,7 @@ func (h *Host) ConfigureGeneralSettings(draft GeneralSettingsDraft) error {
 	}
 
 	h.cfg = candidate
-	if h.budget != nil {
-		h.budget.UpdateConfig(candidate.Budget)
-	} else if candidate.Budget.Enabled() {
-		h.budget = h.newBudgetSentinel(candidate.Budget)
-	}
-	if h.engine != nil {
-		h.engine.style = candidate.Style
-		h.engine.budget = h.budget
-	}
+	h.budget = h.newBudgetSentinel(candidate.Budget)
 	if candidate.Notify.IsEnabled() {
 		h.notifier = notify.New(candidate.Notify.Command, candidate.Notify.Events)
 	} else {

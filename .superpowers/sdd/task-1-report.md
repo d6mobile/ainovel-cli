@@ -35,3 +35,12 @@ DONE
 - Tests run: `docker run --rm -v /mnt/Data/AI/ainovel-cli:/src -w /src golang:1.25 go test ./internal/host -v`
 - Commit: `92d497e`
 - Remaining concerns: none beyond the unrelated untracked plan file already present in the working tree.
+
+## Second fix report
+- Simplified general-settings runtime behavior to avoid unsafe partial live updates: `ConfigureGeneralSettings` now persists and updates `h.cfg`, rebuilds the host-level budget policy from the new config, and refreshes the notifier pointer under `h.mu` without mutating `engine.style` or `engine.budget`.
+- Reverted `BudgetSentinel` to the original simple monotonic state machine and removed in-place policy updates that preserved stale warn/stop state.
+- Added tests for preserving provider config, rebuilding budget policy state, and disabling budget.
+- Replaced direct `h.notifier.Send` call sites in host callbacks with `h.sendNotification`, which snapshots the notifier pointer under `h.mu` before sending.
+- Tests run: `docker run --rm -v /mnt/Data/AI/ainovel-cli:/src -w /src golang:1.25 go test ./internal/host -v`
+- Commit: pending.
+- Remaining concerns: Subagent limit was reached, so this second fix was implemented directly in the main session rather than by another subagent.

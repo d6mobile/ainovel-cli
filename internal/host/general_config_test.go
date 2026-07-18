@@ -2,7 +2,6 @@ package host
 
 import (
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -35,17 +34,8 @@ func newGeneralConfigTestHost(t *testing.T) (*Host, string) {
 
 func boolPtr(v bool) *bool { return &v }
 
-func TestConfigureGeneralSettingsPersistsAndPreservesRuntimeState(t *testing.T) {
+func TestConfigureGeneralSettingsPersistsAndPreservesProviderConfig(t *testing.T) {
 	h, path := newGeneralConfigTestHost(t)
-	h.budget = h.newBudgetSentinel(bootstrap.BudgetConfig{BookUSD: 10, WarnRatio: 0.8})
-	h.engine = &engine{style: "default", budget: h.budget}
-	h.budget.OnCost(8.5)
-	if h.budget.state.Load() != budgetWarned {
-		t.Fatalf("precondition: budget state = %v, want warned", h.budget.state.Load())
-	}
-	origBudget := h.budget
-	origOnCostPtr := reflect.ValueOf(h.usage.onCost).Pointer()
-	origMissingPtr := reflect.ValueOf(h.usage.onMissingUsage).Pointer()
 
 	err := h.ConfigureGeneralSettings(GeneralSettingsDraft{
 		Style:  "fantasy",
@@ -54,28 +44,6 @@ func TestConfigureGeneralSettingsPersistsAndPreservesRuntimeState(t *testing.T) 
 	})
 	if err != nil {
 		t.Fatalf("configure general settings: %v", err)
-	}
-
-	if h.budget != origBudget {
-		t.Fatal("budget sentinel was rebuilt instead of updated in place")
-	}
-	if got := h.budget.Limit(); got != 50 {
-		t.Fatalf("budget limit = %v, want 50", got)
-	}
-	if got := h.budget.state.Load(); got != budgetWarned {
-		t.Fatalf("budget state = %v, want warned", got)
-	}
-	if h.engine == nil || h.engine.style != "fantasy" {
-		t.Fatalf("engine style = %q, want fantasy", h.engine.style)
-	}
-	if h.engine.budget != h.budget {
-		t.Fatal("engine budget pointer was not refreshed")
-	}
-	if got := reflect.ValueOf(h.usage.onCost).Pointer(); got != origOnCostPtr {
-		t.Fatal("usage onCost callback was rebound")
-	}
-	if got := reflect.ValueOf(h.usage.onMissingUsage).Pointer(); got != origMissingPtr {
-		t.Fatal("usage onMissingUsage callback was rebound")
 	}
 
 	saved, err := bootstrap.LoadConfigFile(path)
@@ -99,5 +67,46 @@ func TestConfigureGeneralSettingsPersistsAndPreservesRuntimeState(t *testing.T) 
 	}
 	if saved.Provider != "proxy" || saved.ModelName != "old" {
 		t.Fatalf("provider selection changed unexpectedly: %#v", saved)
+	}
+	if h.cfg.Style != "fantasy" {
+		t.Fatalf("runtime config style = %q, want fantasy", h.cfg.Style)
+	}
+	if h.budget == nil || h.budget.Limit() != 50 {
+		t.Fatalf("runtime budget limit = %v, want 50", h.budget.Limit())
+	}
+}
+
+func TestConfigureGeneralSettingsRebuildsBudgetPolicy(t *testing.T) {
+	h, _ := newGeneralConfigTestHost(t)
+	h.budget = h.newBudgetSentinel(bootstrap.BudgetConfig{BookUSD: 10, WarnRatio: 0.8})
+	h.budget.OnCost(8.5)
+	if h.budget.state.Load() != budgetWarned {
+		t.Fatalf("precondition: budget state = %v, want warned", h.budget.state.Load())
+	}
+	oldBudget := h.budget
+
+	if err := h.ConfigureGeneralSettings(GeneralSettingsDraft{
+		Style:  "default",
+		Budget: bootstrap.BudgetConfig{BookUSD: 50, WarnRatio: 0.8},
+	}); err != nil {
+		t.Fatalf("configure general settings: %v", err)
+	}
+	if h.budget == oldBudget {
+		t.Fatal("budget sentinel was updated in place; want rebuilt policy state")
+	}
+	if got := h.budget.state.Load(); got != budgetNormal {
+		t.Fatalf("new budget state = %v, want normal", got)
+	}
+}
+
+func TestConfigureGeneralSettingsCanDisableBudget(t *testing.T) {
+	h, _ := newGeneralConfigTestHost(t)
+	h.budget = h.newBudgetSentinel(bootstrap.BudgetConfig{BookUSD: 10, WarnRatio: 0.8})
+
+	if err := h.ConfigureGeneralSettings(GeneralSettingsDraft{Style: "default"}); err != nil {
+		t.Fatalf("configure general settings: %v", err)
+	}
+	if h.budget != nil {
+		t.Fatalf("budget = %#v, want nil when disabled", h.budget)
 	}
 }

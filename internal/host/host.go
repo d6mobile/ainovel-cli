@@ -175,11 +175,11 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 	h.gate = NewChapterAdvanceGate(store,
 		func(reason string) {
 			h.abortWithEvent(reason, "info")
-			h.notifier.Send(notify.Notification{Kind: notify.KindAdvanceGate, Level: "info", Title: "ainovel: 等待验收", Body: reason})
+			h.sendNotification(notify.Notification{Kind: notify.KindAdvanceGate, Level: "info", Title: "ainovel: 等待验收", Body: reason})
 		},
 		func(level, summary string) {
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: level})
-			h.notifier.Send(notify.Notification{Kind: notify.KindAdvanceGate, Level: level, Title: "ainovel: 章节推进", Body: summary})
+			h.sendNotification(notify.Notification{Kind: notify.KindAdvanceGate, Level: level, Title: "ainovel: 章节推进", Body: summary})
 		},
 	)
 	// StopGuard 拦截浮出：blocked 是高频自愈动作，只进屏内事件流（推送会刷屏）；
@@ -189,11 +189,11 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 		case "escalated":
 			body := fmt.Sprintf("%s 连续 %d 次空转未落盘必要产物，本轮任务终止，交回 Engine 处理", agent, n)
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Agent: agent, Summary: "StopGuard 升级: " + body, Level: "warn"})
-			h.notifier.Send(notify.Notification{Kind: notify.KindStopGuard, Level: "warn", Title: "ainovel: StopGuard", Body: body})
+			h.sendNotification(notify.Notification{Kind: notify.KindStopGuard, Level: "warn", Title: "ainovel: StopGuard", Body: body})
 		case "hard_stop":
 			body := fmt.Sprintf("%s 遭 provider 拒答（safety/content_filter），本轮任务立即终止", agent)
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Agent: agent, Summary: "StopGuard 升级: " + body, Level: "warn"})
-			h.notifier.Send(notify.Notification{Kind: notify.KindStopGuard, Level: "warn", Title: "ainovel: StopGuard", Body: body})
+			h.sendNotification(notify.Notification{Kind: notify.KindStopGuard, Level: "warn", Title: "ainovel: StopGuard", Body: body})
 		default: // blocked
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Agent: agent,
 				Summary: fmt.Sprintf("StopGuard: %s 未完成必要产物就试图结束，已拦截催促（连续第 %d 次）", agent, n), Level: "info"})
@@ -216,7 +216,7 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 		refresh:   h.refreshWriterRestore,
 		emitEvent: h.emitEvent,
 		notify: func(kind, level, title, body string) {
-			h.notifier.Send(notify.Notification{Kind: kind, Level: level, Title: title, Body: body})
+			h.sendNotification(notify.Notification{Kind: kind, Level: level, Title: title, Body: body})
 		},
 		onPause: func(summary string) { h.abortWithEvent(summary, "warn") },
 		onDone:  h.runEnded,
@@ -234,11 +234,15 @@ func (h *Host) newBudgetSentinel(cfg bootstrap.BudgetConfig) *BudgetSentinel {
 
 func (h *Host) emitBudgetReport(level, summary string) {
 	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: level})
+	h.sendNotification(notify.Notification{Kind: notify.KindBudget, Level: level, Title: "ainovel: 预算", Body: summary})
+}
+
+func (h *Host) sendNotification(nt notify.Notification) {
 	h.mu.Lock()
 	notifier := h.notifier
 	h.mu.Unlock()
 	if notifier != nil {
-		notifier.Send(notify.Notification{Kind: notify.KindBudget, Level: level, Title: "ainovel: 预算", Body: summary})
+		notifier.Send(nt)
 	}
 }
 
@@ -862,7 +866,7 @@ func (h *Host) runEnded() {
 		h.mu.Unlock()
 		slog.Info(summary, "module", "host")
 		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "success"})
-		h.notifier.Send(notify.Notification{
+		h.sendNotification(notify.Notification{
 			Kind: notify.KindRunEnd, Level: "info", Title: "ainovel: 创作完成",
 			Body: h.runEndBody(progress.NovelName, summary),
 		})
@@ -882,7 +886,7 @@ func (h *Host) runEnded() {
 			summary := fmt.Sprintf("引擎停止 (已完成 %d 章)", completed)
 			slog.Warn(summary, "module", "host")
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "warn"})
-			h.notifier.Send(notify.Notification{
+			h.sendNotification(notify.Notification{
 				Kind: notify.KindRunEnd, Level: "warn", Title: "ainovel: 创作停止",
 				Body: h.runEndBody(name, summary),
 			})
