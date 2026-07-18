@@ -166,24 +166,11 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 	if cfg.Notify.IsEnabled() {
 		h.notifier = notify.New(cfg.Notify.Command, cfg.Notify.Events)
 	}
-	// 预算哨兵:Engine 在每轮循环边界直接调用 HandleBoundary(不再经事件订阅)。
-	if sentinel := NewBudgetSentinel(cfg.Budget,
-		func() float64 { c, _, _, _, _ := usage.Totals(); return c },
-		func(reason string) { h.abortWithEvent(reason, "error") },
-		func(level, summary string) {
-			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: level})
-			h.notifier.Send(notify.Notification{Kind: notify.KindBudget, Level: level, Title: "ainovel: 预算", Body: summary})
-		},
-	); sentinel != nil {
-		h.budget = sentinel
-		usage.SetOnCost(sentinel.OnCost)
-		// 计费盲区告警：模型不报 usage 时成本恒 0，预算永不触发——保险丝没接上必须喊人。
-		usage.SetOnMissingUsage(func() {
-			const blind = "预算盲区: 模型未返回 usage 数据，成本统计为 0，预算上限不会触发（自定义模型请确认注册表价格或上游 include_usage）"
-			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: blind, Level: "warn"})
-			h.notifier.Send(notify.Notification{Kind: notify.KindBudget, Level: "warn", Title: "ainovel: 预算", Body: blind})
-		})
+	if cfg.Budget.Enabled() {
+		h.budget = h.newBudgetSentinel(cfg.Budget)
 	}
+	h.usage.SetOnCost(h.recordBudgetCost)
+	h.usage.SetOnMissingUsage(h.recordBudgetMissingUsage)
 	// 统一前进闸门：执行一次性 hold，并阻止 review 模式下无许可的新章。
 	h.gate = NewChapterAdvanceGate(store,
 		func(reason string) {
@@ -236,6 +223,41 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 	}
 
 	return h, nil
+}
+func (h *Host) newBudgetSentinel(cfg bootstrap.BudgetConfig) *BudgetSentinel {
+	return NewBudgetSentinel(cfg,
+		func() float64 { c, _, _, _, _ := h.usage.Totals(); return c },
+		func(reason string) { h.abortWithEvent(reason, "error") },
+		h.emitBudgetReport,
+	)
+}
+
+func (h *Host) emitBudgetReport(level, summary string) {
+	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: level})
+	h.mu.Lock()
+	notifier := h.notifier
+	h.mu.Unlock()
+	if notifier != nil {
+		notifier.Send(notify.Notification{Kind: notify.KindBudget, Level: level, Title: "ainovel: 预算", Body: summary})
+	}
+}
+
+func (h *Host) recordBudgetCost(total float64) {
+	h.mu.Lock()
+	budget := h.budget
+	h.mu.Unlock()
+	if budget != nil {
+		budget.OnCost(total)
+	}
+}
+
+func (h *Host) recordBudgetMissingUsage() {
+	h.mu.Lock()
+	budget := h.budget
+	h.mu.Unlock()
+	if budget != nil {
+		budget.OnMissingUsage()
+	}
 }
 
 // ── 生命周期 ──
