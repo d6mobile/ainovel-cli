@@ -102,9 +102,16 @@ func (h *Host) ModelConfiguration() ModelConfigurationSnapshot {
 		sort.Strings(refs[key])
 	}
 
+	notifyCfg := h.cfg.Notify
+	if notifyCfg.Enabled != nil {
+		enabled := *notifyCfg.Enabled
+		notifyCfg.Enabled = &enabled
+	}
+	notifyCfg.Events = append([]string(nil), notifyCfg.Events...)
+
 	return ModelConfigurationSnapshot{
 		Providers: providers, DefaultProvider: h.cfg.Provider, DefaultModel: h.cfg.ModelName,
-		References: refs, Style: h.cfg.Style, Budget: h.cfg.Budget, Notify: h.cfg.Notify,
+		References: refs, Style: h.cfg.Style, Budget: h.cfg.Budget, Notify: notifyCfg,
 	}
 }
 

@@ -52,6 +52,23 @@ func TestSetRoleThinkingPreservesIntentAcrossModelSwitch(t *testing.T) {
 	}
 }
 
+func TestModelConfigurationCopiesNotifySnapshot(t *testing.T) {
+	h, _ := newModelConfigTestHost(t)
+	enabled := true
+	h.cfg.Notify = bootstrap.NotifyConfig{Enabled: &enabled, Events: []string{"run_end", "budget"}}
+
+	snapshot := h.ModelConfiguration()
+	*snapshot.Notify.Enabled = false
+	snapshot.Notify.Events[0] = "deadlock"
+
+	if h.cfg.Notify.Enabled == nil || !*h.cfg.Notify.Enabled {
+		t.Fatal("snapshot notify enabled shares pointer with runtime config")
+	}
+	if got := h.cfg.Notify.Events[0]; got != "run_end" {
+		t.Fatalf("snapshot notify events share backing array with runtime config: got %q", got)
+	}
+}
+
 func TestConfigureModelsRejectsDeletingReferencedModel(t *testing.T) {
 	h, _ := newModelConfigTestHost(t)
 	// 删掉被 writer 角色引用的 "writer-model"（保留顶层在用的 "old"）应被拒。
