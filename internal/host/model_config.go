@@ -33,6 +33,9 @@ type ModelConfigurationSnapshot struct {
 	DefaultProvider string
 	DefaultModel    string
 	References      map[string][]string
+	Style           string
+	Budget          bootstrap.BudgetConfig
+	Notify          bootstrap.NotifyConfig
 }
 
 func (s ModelConfigurationSnapshot) ReferencesFor(provider, model string) []string {
@@ -101,7 +104,7 @@ func (h *Host) ModelConfiguration() ModelConfigurationSnapshot {
 
 	return ModelConfigurationSnapshot{
 		Providers: providers, DefaultProvider: h.cfg.Provider, DefaultModel: h.cfg.ModelName,
-		References: refs,
+		References: refs, Style: h.cfg.Style, Budget: h.cfg.Budget, Notify: h.cfg.Notify,
 	}
 }
 

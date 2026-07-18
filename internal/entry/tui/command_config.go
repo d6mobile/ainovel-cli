@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/voocel/ainovel-cli/internal/bootstrap"
 	"github.com/voocel/ainovel-cli/internal/host"
+	"github.com/voocel/ainovel-cli/internal/notify"
 	"github.com/voocel/ainovel-cli/internal/utils"
 )
 
@@ -30,6 +31,13 @@ const (
 	configStepModelDetail // Mô hình：Cửa sổ ngữ cảnh /
 	configStepModelName
 	configStepModelWindow
+	configStepGeneral
+	configStepGeneralStyle
+	configStepGeneralBudget
+	configStepGeneralBudgetInput
+	configStepGeneralNotify
+	configStepGeneralNotifyCommand
+	configStepGeneralNotifyEvents
 )
 
 type configProviderChoice struct {
@@ -38,6 +46,7 @@ type configProviderChoice struct {
 	preset   *bootstrap.ProviderPreset
 	custom   bool
 	add      bool // “ Provider…”，Trung bình
+	general  bool
 }
 
 type modelConfigState struct {
@@ -64,10 +73,26 @@ type modelConfigState struct {
 
 	pendingModel string
 	editModelIdx int
+
+	generalStyle  string
+	generalBudget bootstrap.BudgetConfig
+	generalNotify bootstrap.NotifyConfig
+	editSetting   string
 }
 
 func newModelConfigState(rt *host.Host) *modelConfigState {
-	state := &modelConfigState{snapshot: rt.ModelConfiguration(), editModelIdx: -1}
+	snapshot := rt.ModelConfiguration()
+	style := strings.TrimSpace(snapshot.Style)
+	if style == "" {
+		style = "default"
+	}
+	state := &modelConfigState{
+		snapshot:      snapshot,
+		editModelIdx:  -1,
+		generalStyle:  style,
+		generalBudget: snapshot.Budget,
+		generalNotify: snapshot.Notify,
+	}
 	state.buildProviderMenus()
 	return state
 }
@@ -87,6 +112,9 @@ func (s *modelConfigState) buildProviderMenus() {
 	}
 	s.providerChoices = append(s.providerChoices, configProviderChoice{
 		label: "+ Thêm Provider…", add: true,
+	})
+	s.providerChoices = append(s.providerChoices, configProviderChoice{
+		label: "Cài đặt chung…", general: true,
 	})
 
 	for _, presetValue := range bootstrap.ProviderPresets() {
@@ -243,12 +271,18 @@ func (s *modelConfigState) beginAPIKey() {
 // hub Mô hình ⊃ Mô hình/。
 func (s *modelConfigState) escapeBack() (configStep, bool) {
 	switch s.step {
-	case configStepAddPicker, configStepHub:
+	case configStepAddPicker, configStepHub, configStepGeneral:
 		return configStepProvider, true
 	case configStepCustomName:
 		return configStepAddPicker, true
 	case configStepProtocol, configStepAPI, configStepKeyAction, configStepKeyInput, configStepBaseURL, configStepModels:
 		return configStepHub, true
+	case configStepGeneralStyle, configStepGeneralBudget, configStepGeneralNotify:
+		return configStepGeneral, true
+	case configStepGeneralBudgetInput:
+		return configStepGeneralBudget, true
+	case configStepGeneralNotifyCommand, configStepGeneralNotifyEvents:
+		return configStepGeneralNotify, true
 	case configStepModelDetail, configStepModelName:
 		return configStepModels, true
 	case configStepModelWindow:
@@ -308,10 +342,26 @@ func (s *modelConfigState) draft() host.ModelConfigurationDraft {
 	}
 }
 
+func (s *modelConfigState) generalDraft() host.GeneralSettingsDraft {
+	notifyCfg := s.generalNotify
+	notifyCfg.Events = append([]string(nil), s.generalNotify.Events...)
+	return host.GeneralSettingsDraft{
+		Style:  s.generalStyle,
+		Budget: s.generalBudget,
+		Notify: notifyCfg,
+	}
+}
+
 type modelConfigSavedMsg struct{ err error }
+
+type generalConfigSavedMsg struct{ err error }
 
 func saveModelConfiguration(rt *host.Host, draft host.ModelConfigurationDraft) tea.Cmd {
 	return func() tea.Msg { return modelConfigSavedMsg{err: rt.ConfigureModels(draft)} }
+}
+
+func saveGeneralConfiguration(rt *host.Host, draft host.GeneralSettingsDraft) tea.Cmd {
+	return func() tea.Msg { return generalConfigSavedMsg{err: rt.ConfigureGeneralSettings(draft)} }
 }
 
 func (m Model) handleModelConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -342,8 +392,119 @@ func (m Model) handleModelConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				state.step = configStepAddPicker
 				state.cursor = 0
 				state.message = ""
+			} else if choice.general {
+				state.step = configStepGeneral
+				state.cursor = 0
+				state.message = ""
 			} else {
 				state.applyProviderChoice(choice)
+			}
+		}
+	case configStepGeneral:
+		fields := state.generalFields()
+		moveConfigCursor(state, msg, len(fields))
+		if msg.Type == tea.KeyEnter && state.cursor >= 0 && state.cursor < len(fields) {
+			switch fields[state.cursor].id {
+			case "style":
+				state.step = configStepGeneralStyle
+				state.cursor = indexOfString(configStyleOptions, state.generalStyle)
+			case "budget":
+				state.step = configStepGeneralBudget
+				state.cursor = 0
+			case "notify":
+				state.step = configStepGeneralNotify
+				state.cursor = 0
+			case "save":
+				state.saving = true
+				state.message = "Đang kiểm tra và lưu cấu hình chung..."
+				return m, saveGeneralConfiguration(m.runtime, state.generalDraft())
+			}
+		}
+	case configStepGeneralStyle:
+		moveConfigCursor(state, msg, len(configStyleOptions))
+		if msg.Type == tea.KeyEnter {
+			state.generalStyle = configStyleOptions[state.cursor]
+			state.step = configStepGeneral
+			state.cursor = 0
+			state.message = ""
+		}
+	case configStepGeneralBudget:
+		fields := state.generalBudgetFields()
+		moveConfigCursor(state, msg, len(fields))
+		if msg.Type == tea.KeyEnter && state.cursor >= 0 && state.cursor < len(fields) {
+			field := fields[state.cursor]
+			switch field.id {
+			case "book_usd":
+				state.editSetting = field.id
+				if state.generalBudget.BookUSD > 0 {
+					state.input = strconv.FormatFloat(state.generalBudget.BookUSD, 'f', -1, 64)
+				} else {
+					state.input = ""
+				}
+				state.step = configStepGeneralBudgetInput
+			case "warn_ratio":
+				state.editSetting = field.id
+				if state.generalBudget.WarnRatio > 0 {
+					state.input = strconv.FormatFloat(state.generalBudget.WarnRatio, 'f', -1, 64)
+				} else {
+					state.input = "0.8"
+				}
+				state.step = configStepGeneralBudgetInput
+			case "hard_stop":
+				state.generalBudget.HardStop = !state.generalBudget.HardStop
+			}
+		}
+	case configStepGeneralBudgetInput:
+		if handleConfigInput(&state.input, msg) && msg.Type == tea.KeyEnter {
+			if err := state.applyBudgetInput(); err != nil {
+				state.message = err.Error()
+				break
+			}
+			state.step = configStepGeneralBudget
+			state.cursor = 0
+			state.message = ""
+		}
+	case configStepGeneralNotify:
+		fields := state.generalNotifyFields()
+		moveConfigCursor(state, msg, len(fields))
+		if msg.Type == tea.KeyEnter && state.cursor >= 0 && state.cursor < len(fields) {
+			switch fields[state.cursor].id {
+			case "enabled":
+				next := !state.generalNotify.IsEnabled()
+				state.generalNotify.Enabled = &next
+			case "command":
+				state.input = state.generalNotify.Command
+				state.step = configStepGeneralNotifyCommand
+			case "events":
+				state.step = configStepGeneralNotifyEvents
+				state.cursor = 0
+			}
+		}
+	case configStepGeneralNotifyCommand:
+		if handleConfigInput(&state.input, msg) && msg.Type == tea.KeyEnter {
+			state.generalNotify.Command = strings.TrimSpace(state.input)
+			state.step = configStepGeneralNotify
+			state.cursor = 0
+			state.message = ""
+		}
+	case configStepGeneralNotifyEvents:
+		total := len(notify.Kinds()) + 2
+		moveConfigCursor(state, msg, total)
+		if msg.Type == tea.KeyEnter {
+			switch state.cursor {
+			case 0:
+				state.generalNotify.Events = nil
+				enabled := true
+				state.generalNotify.Enabled = &enabled
+				state.message = "Đã chọn tất cả events"
+			case 1:
+				state.generalNotify.Events = nil
+				enabled := false
+				state.generalNotify.Enabled = &enabled
+				state.message = "Đã tắt notify; bật lại để gửi events"
+			default:
+				state.toggleNotifyEvent(notify.Kinds()[state.cursor-2])
+				state.message = ""
 			}
 		}
 	case configStepAddPicker:
@@ -610,6 +771,148 @@ func parseContextWindowInput(input string) (int, error) {
 	return int(result), nil
 }
 
+var configStyleOptions = []string{"default", "romance", "fantasy", "suspense"}
+
+func indexOfString(items []string, value string) int {
+	for i, item := range items {
+		if item == value {
+			return i
+		}
+	}
+	return 0
+}
+
+func (s *modelConfigState) generalFields() []hubField {
+	return []hubField{
+		{"style", "Style", s.generalStyle},
+		{"budget", "Budget", s.budgetSummary()},
+		{"notify", "Notify", s.notifySummary()},
+		{"save", "Lưu cài đặt chung", ""},
+	}
+}
+
+func (s *modelConfigState) generalBudgetFields() []hubField {
+	return []hubField{
+		{"book_usd", "book_usd", formatFloatSetting(s.generalBudget.BookUSD, "0 = tắt")},
+		{"warn_ratio", "warn_ratio", formatFloatSetting(s.effectiveWarnRatio(), "0.8")},
+		{"hard_stop", "hard_stop", formatBoolSetting(s.generalBudget.HardStop)},
+	}
+}
+
+func (s *modelConfigState) generalNotifyFields() []hubField {
+	return []hubField{
+		{"enabled", "enabled", formatBoolSetting(s.generalNotify.IsEnabled())},
+		{"command", "command", emptyAsDefault(s.generalNotify.Command, "mặc định hệ thống")},
+		{"events", "events", fmt.Sprintf("%d mục", s.notifyEventCount())},
+	}
+}
+
+func (s *modelConfigState) budgetSummary() string {
+	if s.generalBudget.BookUSD <= 0 {
+		return "tắt"
+	}
+	hard := "off"
+	if s.generalBudget.HardStop {
+		hard = "on"
+	}
+	return fmt.Sprintf("%.2f USD, warn %.0f%%, hard stop: %s", s.generalBudget.BookUSD, s.effectiveWarnRatio()*100, hard)
+}
+
+func (s *modelConfigState) notifySummary() string {
+	if !s.generalNotify.IsEnabled() {
+		return "off"
+	}
+	return fmt.Sprintf("on, %d events", s.notifyEventCount())
+}
+
+func (s *modelConfigState) notifyEventCount() int {
+	if len(s.generalNotify.Events) == 0 {
+		return len(notify.Kinds())
+	}
+	return len(s.generalNotify.Events)
+}
+
+func (s *modelConfigState) effectiveWarnRatio() float64 {
+	if s.generalBudget.WarnRatio > 0 {
+		return s.generalBudget.WarnRatio
+	}
+	return 0.8
+}
+
+func formatFloatSetting(value float64, fallback string) string {
+	if value <= 0 {
+		return fallback
+	}
+	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+func formatBoolSetting(value bool) string {
+	if value {
+		return "on"
+	}
+	return "off"
+}
+
+func emptyAsDefault(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func (s *modelConfigState) applyBudgetInput() error {
+	value := strings.TrimSpace(s.input)
+	if value == "" {
+		value = "0"
+	}
+	number, err := strconv.ParseFloat(value, 64)
+	if err != nil || number < 0 {
+		return fmt.Errorf("Giá trị ngân sách phải là số không âm")
+	}
+	switch s.editSetting {
+	case "book_usd":
+		s.generalBudget.BookUSD = number
+		if number > 0 && s.generalBudget.WarnRatio == 0 {
+			s.generalBudget.WarnRatio = 0.8
+		}
+	case "warn_ratio":
+		if s.generalBudget.BookUSD > 0 && (number <= 0 || number >= 1) {
+			return fmt.Errorf("warn_ratio phải nằm trong khoảng (0, 1) khi budget bật")
+		}
+		s.generalBudget.WarnRatio = number
+	}
+	return nil
+}
+
+func (s *modelConfigState) toggleNotifyEvent(event string) {
+	seen := false
+	next := s.generalNotify.Events[:0]
+	for _, item := range s.generalNotify.Events {
+		if item == event {
+			seen = true
+			continue
+		}
+		next = append(next, item)
+	}
+	if !seen {
+		next = append(next, event)
+	}
+	s.generalNotify.Events = append([]string(nil), next...)
+}
+
+func (s *modelConfigState) notifyEventSelected(event string) bool {
+	if len(s.generalNotify.Events) == 0 && s.generalNotify.IsEnabled() {
+		return true
+	}
+	for _, item := range s.generalNotify.Events {
+		if item == event {
+			return true
+		}
+	}
+	return false
+}
+
 func renderModelConfigModal(width int, state *modelConfigState) string {
 	if state == nil {
 		return ""
@@ -628,6 +931,35 @@ func renderModelConfigModal(width int, state *modelConfigState) string {
 	case configStepAddPicker:
 		lines = append(lines, configHeading("Chọn Provider muốn thêm"))
 		lines = append(lines, renderConfigChoices(labelsForProviderChoices(state.presetChoices), state.cursor, contentW, 12)...)
+	case configStepGeneral:
+		lines = append(lines, configHeading("Cài đặt chung"))
+		lines = append(lines, renderFieldList(state.generalFields(), state.cursor, contentW)...)
+		hint = "↑↓ Chọn · Enter Mở/Lưu · Esc Quay lại"
+	case configStepGeneralStyle:
+		lines = append(lines, configHeading("Phong cách viết"))
+		lines = append(lines, renderConfigChoices(configStyleOptions, state.cursor, contentW, 8)...)
+	case configStepGeneralBudget:
+		lines = append(lines, configHeading("Budget"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(colorDim).Render("Trạng thái: "+state.budgetSummary()))
+		lines = append(lines, renderFieldList(state.generalBudgetFields(), state.cursor, contentW)...)
+		hint = "↑↓ Chọn · Enter Chỉnh/Toggle · Esc Quay lại"
+	case configStepGeneralBudgetInput:
+		lines = append(lines, configHeading("Budget - "+state.editSetting))
+		lines = append(lines, renderConfigInput(state.input, false, contentW))
+		hint = configInputHint
+	case configStepGeneralNotify:
+		lines = append(lines, configHeading("Notify"))
+		lines = append(lines, renderFieldList(state.generalNotifyFields(), state.cursor, contentW)...)
+		hint = "↑↓ Chọn · Enter Chỉnh/Toggle · Esc Quay lại"
+	case configStepGeneralNotifyCommand:
+		lines = append(lines, configHeading("Notify command"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(colorDim).Render("Để trống = dùng notifier mặc định của hệ điều hành"))
+		lines = append(lines, renderConfigInput(state.input, false, contentW))
+		hint = configInputHint
+	case configStepGeneralNotifyEvents:
+		lines = append(lines, configHeading("Notify events"))
+		lines = append(lines, renderNotifyEventChoices(state, contentW)...)
+		hint = "↑↓ Chọn · Enter Toggle · Esc Quay lại"
 	case configStepCustomName:
 		lines = append(lines, configHeading("Tên Provider tùy chỉnh"), renderConfigInput(state.input, false, contentW))
 		hint = configInputHint
@@ -752,6 +1084,18 @@ func labelsForProviderChoices(choices []configProviderChoice) []string {
 		out = append(out, choice.label)
 	}
 	return out
+}
+
+func renderNotifyEventChoices(state *modelConfigState, width int) []string {
+	labels := []string{"[+] Chọn tất cả", "[-] Bỏ chọn tất cả"}
+	for _, event := range notify.Kinds() {
+		mark := "[ ]"
+		if state.notifyEventSelected(event) {
+			mark = "[x]"
+		}
+		labels = append(labels, mark+" "+event)
+	}
+	return renderConfigChoices(labels, state.cursor, width, 12)
 }
 
 func renderConfigChoices(labels []string, cursor, width, limit int) []string {

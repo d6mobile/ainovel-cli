@@ -191,12 +191,15 @@ func TestProviderMenuIsTwoLevel(t *testing.T) {
 	}}
 	state.buildProviderMenus()
 
-	// Level 1 = 2 edit entries + 1 add entry; the last item is add, with no other add/preset entries mixed in.
-	if len(state.providerChoices) != 3 {
-		t.Fatalf("menu cấp một phải có 2 mục sửa + 1 mục thêm, got %d mục", len(state.providerChoices))
+	// Level 1 = 2 edit entries + 1 add entry + 1 general-settings entry; provider presets appear only in level 2.
+	if len(state.providerChoices) != 4 {
+		t.Fatalf("menu cấp một phải có 2 mục sửa + 1 mục thêm + cài đặt chung, got %d mục", len(state.providerChoices))
 	}
-	if !state.providerChoices[len(state.providerChoices)-1].add {
-		t.Fatal("mục cuối menu cấp một phải là lối vào “Thêm Provider…”")
+	if !state.providerChoices[2].add {
+		t.Fatal("mục thêm Provider phải là lối vào “Thêm Provider…”")
+	}
+	if !state.providerChoices[3].general {
+		t.Fatal("mục cuối menu cấp một phải là “Cài đặt chung…”")
 	}
 	for i, c := range state.providerChoices[:2] {
 		if c.existing == nil || c.add {
@@ -232,5 +235,56 @@ func TestProviderMenuShowsDeepSeekAndOllamaPresets(t *testing.T) {
 
 	if !slices.Contains(labels, "DeepSeek") || !slices.Contains(labels, "Ollama") {
 		t.Fatalf("preset catalog phải có DeepSeek và Ollama, got %v", labels)
+	}
+}
+
+func TestGeneralSettingsEntryAppearsInConfigMenu(t *testing.T) {
+	state := &modelConfigState{snapshot: host.ModelConfigurationSnapshot{}}
+	state.buildProviderMenus()
+
+	labels := labelsForProviderChoices(state.providerChoices)
+	if !slices.Contains(labels, "Cài đặt chung…") {
+		t.Fatalf("config menu = %v, want Cài đặt chung…", labels)
+	}
+}
+
+func TestGeneralSettingsLandingShowsStyleBudgetNotify(t *testing.T) {
+	state := &modelConfigState{
+		step:         configStepGeneral,
+		generalStyle: "default",
+	}
+	view := renderModelConfigModal(120, state)
+	for _, want := range []string{"Style", "Budget", "Notify"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("general settings modal missing %q: %s", want, view)
+		}
+	}
+}
+
+func TestGeneralBudgetInputValidation(t *testing.T) {
+	state := &modelConfigState{editSetting: "book_usd", input: "25.5"}
+	if err := state.applyBudgetInput(); err != nil {
+		t.Fatalf("book_usd input failed: %v", err)
+	}
+	if state.generalBudget.BookUSD != 25.5 || state.generalBudget.WarnRatio != 0.8 {
+		t.Fatalf("budget = %#v, want book_usd 25.5 and default warn 0.8", state.generalBudget)
+	}
+	state.editSetting = "warn_ratio"
+	state.input = "1.2"
+	if err := state.applyBudgetInput(); err == nil {
+		t.Fatal("warn_ratio >= 1 should fail when budget is enabled")
+	}
+}
+
+func TestGeneralNotifyEventToggle(t *testing.T) {
+	enabled := true
+	state := &modelConfigState{generalNotify: bootstrap.NotifyConfig{Enabled: &enabled, Events: []string{"budget"}}}
+	state.toggleNotifyEvent("run_end")
+	if !state.notifyEventSelected("run_end") {
+		t.Fatal("run_end should be selected after first toggle")
+	}
+	state.toggleNotifyEvent("run_end")
+	if state.notifyEventSelected("run_end") {
+		t.Fatal("run_end should be unselected after second toggle")
 	}
 }
