@@ -79,6 +79,7 @@ func TestConfigureGeneralSettingsPersistsAndPreservesProviderConfig(t *testing.T
 func TestConfigureGeneralSettingsRebuildsBudgetPolicy(t *testing.T) {
 	h, _ := newGeneralConfigTestHost(t)
 	h.budget = h.newBudgetSentinel(bootstrap.BudgetConfig{BookUSD: 10, WarnRatio: 0.8})
+	h.engine = &engine{budget: h.budget}
 	h.budget.OnCost(8.5)
 	if h.budget.state.Load() != budgetWarned {
 		t.Fatalf("precondition: budget state = %v, want warned", h.budget.state.Load())
@@ -96,6 +97,9 @@ func TestConfigureGeneralSettingsRebuildsBudgetPolicy(t *testing.T) {
 	}
 	if got := h.budget.state.Load(); got != budgetNormal {
 		t.Fatalf("new budget state = %v, want normal", got)
+	}
+	if h.engine.currentBudget() != h.budget {
+		t.Fatal("engine budget did not receive rebuilt policy")
 	}
 }
 

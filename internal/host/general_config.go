@@ -36,6 +36,9 @@ func (h *Host) ConfigureGeneralSettings(draft GeneralSettingsDraft) error {
 
 	h.cfg = candidate
 	h.budget = h.newBudgetSentinel(candidate.Budget)
+	if h.engine != nil {
+		h.engine.setBudget(h.budget)
+	}
 	if candidate.Notify.IsEnabled() {
 		h.notifier = notify.New(candidate.Notify.Command, candidate.Notify.Events)
 	} else {

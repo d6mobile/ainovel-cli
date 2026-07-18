@@ -214,7 +214,7 @@ func (e *engine) run(ctx context.Context) {
 		}
 
 		// 政策边界:预算止损优先于验收/推进暂停。
-		if e.budget.HandleBoundary() {
+		if e.currentBudget().HandleBoundary() {
 			return
 		}
 		if e.gate.HandleBoundary() {
@@ -236,6 +236,18 @@ func (e *engine) nextDefersGate() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.next != nil && e.deferGateForNext
+}
+
+func (e *engine) setBudget(budget *BudgetSentinel) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.budget = budget
+}
+
+func (e *engine) currentBudget() *BudgetSentinel {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.budget
 }
 
 // planStartFallback 覆盖规划事实缺位、Route 无法推导规划师的两个窗口:
