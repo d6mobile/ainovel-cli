@@ -27,3 +27,11 @@ DONE
 ## Concerns
 - I did not drive the `/config` TUI surface in this task because that UI branch is not part of Task 1; this task only adds the host-side persistence path.
 - `docs/superpowers/plans/2026-07-18-config-general-settings-ui.md` exists as an untracked file in the working tree but was not modified for this task.
+
+## Fix report
+- Changed `internal/host/general_config.go` to save app-wide settings without rebuilding the budget sentinel, refresh the live engine style, and rebuild notify state in place.
+- Changed `internal/host/budget.go` so the sentinel can be updated in place and keep its in-flight state instead of being recreated.
+- Added a focused regression test in `internal/host/general_config_test.go` that checks persisted settings, preserved budget state, unchanged usage callbacks, and live engine style refresh.
+- Tests run: `docker run --rm -v /mnt/Data/AI/ainovel-cli:/src -w /src golang:1.25 go test ./internal/host -v`
+- Commit: `92d497e`
+- Remaining concerns: none beyond the unrelated untracked plan file already present in the working tree.
