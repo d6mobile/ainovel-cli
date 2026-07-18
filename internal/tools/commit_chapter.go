@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -35,10 +36,10 @@ type commitOutput struct {
 
 func (t *CommitChapterTool) Name() string { return "commit_chapter" }
 func (t *CommitChapterTool) Description() string {
-	return "提交章节终稿。加载草稿正文保存为终稿，更新时间线、伏笔、关系、角色状态和进度。" +
-		"返回结构化事实：next_chapter / review_required / arc_end / volume_end / needs_expansion / book_complete / flow 等"
+	return "Lưu bản thảo cuối của chương. Công cụ đọc bản nháp, lưu thành bản chính thức, cập nhật dòng thời gian, phục bút, quan hệ, trạng thái nhân vật/thực thể và tiến độ. " +
+		"Trả về dữ liệu có cấu trúc: next_chapter / review_required / arc_end / volume_end / needs_expansion / book_complete / flow."
 }
-func (t *CommitChapterTool) Label() string { return "提交章节" }
+func (t *CommitChapterTool) Label() string { return "Lưu chương" }
 
 // 写工具（跨域原子操作：草稿→终稿→摘要→进度→checkpoint），禁止并发。
 func (t *CommitChapterTool) ReadOnly(_ json.RawMessage) bool        { return false }
@@ -46,71 +47,350 @@ func (t *CommitChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return fal
 
 func (t *CommitChapterTool) Schema() map[string]any {
 	timelineSchema := schema.Object(
-		schema.Property("time", schema.String("故事内时间")).Required(),
-		schema.Property("event", schema.String("事件描述")).Required(),
-		schema.Property("characters", schema.Array("涉及角色", schema.String(""))),
+		schema.Property("time", schema.String("Thời điểm trong truyện")).Required(),
+		schema.Property("event", schema.String("Mô tả sự kiện")).Required(),
+		schema.Property("characters", schema.Array("Nhân vật liên quan", schema.String(""))),
 	)
 	foreshadowSchema := schema.Object(
-		schema.Property("id", schema.String("伏笔 ID")).Required(),
-		schema.Property("action", schema.Enum("操作", "plant", "advance", "resolve")).Required(),
-		schema.Property("description", schema.String("伏笔描述（仅 plant 时必需）")),
+		schema.Property("id", schema.String("ID phục bút ổn định")).Required(),
+		schema.Property("action", schema.Enum("Thao tác", "plant", "advance", "resolve")).Required(),
+		schema.Property("description", schema.String("Mô tả phục bút; bắt buộc về mặt nội dung khi action=plant")),
 	)
 	relationshipSchema := schema.Object(
-		schema.Property("character_a", schema.String("角色 A")).Required(),
-		schema.Property("character_b", schema.String("角色 B")).Required(),
-		schema.Property("relation", schema.String("当前关系描述")).Required(),
+		schema.Property("character_a", schema.String("Nhân vật A")).Required(),
+		schema.Property("character_b", schema.String("Nhân vật B")).Required(),
+		schema.Property("relation", schema.String("Mô tả quan hệ hiện tại")).Required(),
 	)
 	stateChangeSchema := schema.Object(
-		schema.Property("entity", schema.String("角色名或实体名")).Required(),
-		schema.Property("field", schema.String("变化属性")).Required(),
-		schema.Property("old_value", schema.String("变化前的值")),
-		schema.Property("new_value", schema.String("变化后的值")).Required(),
-		schema.Property("reason", schema.String("变化原因")),
+		schema.Property("entity", schema.String("Tên nhân vật hoặc thực thể")).Required(),
+		schema.Property("field", schema.String("Thuộc tính thay đổi")).Required(),
+		schema.Property("old_value", schema.String("Giá trị trước thay đổi")),
+		schema.Property("new_value", schema.String("Giá trị sau thay đổi")).Required(),
+		schema.Property("reason", schema.String("Nguyên nhân thay đổi")),
+	)
+	castIntroSchema := schema.Object(
+		schema.Property("name", schema.String("Tên nhân vật")).Required(),
+		schema.Property("brief_role", schema.String("Định vị một câu, ví dụ: chủ quán trọ / tay đánh bạc")).Required(),
 	)
 	feedbackSchema := schema.Object(
-		schema.Property("deviation", schema.String("偏离大纲的描述")).Required(),
-		schema.Property("suggestion", schema.String("对后续大纲的调整建议")).Required(),
+		schema.Property("deviation", schema.String("Mô tả chỗ lệch khỏi dàn ý")).Required(),
+		schema.Property("suggestion", schema.String("Đề xuất điều chỉnh dàn ý tiếp theo")).Required(),
 	)
-	feedbackSchema["description"] = "对后续大纲的建议对象；必须直接传 JSON object，不要传字符串化 JSON"
-	return schema.Object(
-		schema.Property("chapter", schema.Int("章节号")).Required(),
-		schema.Property("summary", schema.String("本章内容摘要（200字以内）")).Required(),
-		schema.Property("characters", schema.Array("本章出场角色名", schema.String(""))).Required(),
-		schema.Property("key_events", schema.Array("本章关键事件", schema.String(""))).Required(),
-		schema.Property("timeline_events", schema.Array("本章时间线事件", timelineSchema)),
-		schema.Property("foreshadow_updates", schema.Array("伏笔操作", foreshadowSchema)),
-		schema.Property("relationship_changes", schema.Array("关系变化", relationshipSchema)),
-		schema.Property("state_changes", schema.Array("角色/实体状态变化", stateChangeSchema)),
-		schema.Property("cast_intros", schema.Array("本章首次引入且后续可能再出现的次要角色简介（不含主角及 characters.json 已有角色）", schema.Object(
-			schema.Property("name", schema.String("角色名")).Required(),
-			schema.Property("brief_role", schema.String("一句话定位（如：客栈老板/赌坊打手）")).Required(),
-		))),
-		schema.Property("hook_type", schema.Enum("章末钩子类型", "crisis", "mystery", "desire", "emotion", "choice")),
-		schema.Property("dominant_strand", schema.Enum("本章主导叙事线", "quest", "fire", "constellation")),
+	for _, s := range []map[string]any{timelineSchema, foreshadowSchema, relationshipSchema, stateChangeSchema, castIntroSchema, feedbackSchema} {
+		s["additionalProperties"] = false
+	}
+	feedbackSchema["description"] = "Đối tượng góp ý cho dàn ý tiếp theo; truyền JSON object thật, không truyền chuỗi JSON."
+	root := schema.Object(
+		schema.Property("chapter", schema.Int("Số chương")).Required(),
+		schema.Property("summary", schema.String("Tóm tắt chương, tối đa khoảng 200 từ")).Required(),
+		schema.Property("characters", schema.Array("Tên chính thức các nhân vật xuất hiện trong chương", schema.String(""))).Required(),
+		schema.Property("key_events", schema.Array("Các sự kiện quan trọng của chương", schema.String(""))).Required(),
+		schema.Property("timeline_events", schema.Array("Các sự kiện trên dòng thời gian; phải là JSON array thật, không stringify", timelineSchema)),
+		schema.Property("foreshadow_updates", schema.Array("Thao tác phục bút; phải là JSON array thật, không stringify", foreshadowSchema)),
+		schema.Property("relationship_changes", schema.Array("Thay đổi quan hệ; phải là JSON array thật, không stringify", relationshipSchema)),
+		schema.Property("state_changes", schema.Array("Thay đổi trạng thái nhân vật hoặc thực thể; phải là JSON array thật, không stringify", stateChangeSchema)),
+		schema.Property("cast_intros", schema.Array("Nhân vật phụ lần đầu xuất hiện và có thể tái xuất; phải là JSON array thật", castIntroSchema)),
+		schema.Property("hook_type", schema.Enum("Loại móc cuối chương", "crisis", "mystery", "desire", "emotion", "choice")),
+		schema.Property("dominant_strand", schema.Enum("Tuyến tự sự chủ đạo", "quest", "fire", "constellation")),
 		schema.Property("feedback", feedbackSchema),
 	)
+	root["additionalProperties"] = false
+	return root
+}
+
+type commitChapterArgs struct {
+	Chapter             int                        `json:"chapter"`
+	Summary             string                     `json:"summary"`
+	Characters          []string                   `json:"characters"`
+	KeyEvents           []string                   `json:"key_events"`
+	TimelineEvents      []domain.TimelineEvent     `json:"timeline_events"`
+	ForeshadowUpdates   []domain.ForeshadowUpdate  `json:"foreshadow_updates"`
+	RelationshipChanges []domain.RelationshipEntry `json:"relationship_changes"`
+	StateChanges        []domain.StateChange       `json:"state_changes"`
+	CastIntros          []domain.CastIntro         `json:"cast_intros"`
+	HookType            string                     `json:"hook_type"`
+	DominantStrand      string                     `json:"dominant_strand"`
+	Feedback            *domain.OutlineFeedback    `json:"feedback"`
+}
+
+func decodeCommitChapterArgs(args json.RawMessage) (commitChapterArgs, error) {
+	var out commitChapterArgs
+	raw, err := normalizeRootObject(args)
+	if err != nil {
+		return out, err
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return out, err
+	}
+	allowed := map[string]bool{
+		"chapter": true, "summary": true, "characters": true, "key_events": true,
+		"timeline_events": true, "foreshadow_updates": true, "relationship_changes": true,
+		"state_changes": true, "cast_intros": true, "hook_type": true, "dominant_strand": true,
+		"feedback": true,
+	}
+	for k := range fields {
+		if !allowed[k] {
+			return out, fmt.Errorf("trường không thuộc schema: %s", k)
+		}
+	}
+	for _, k := range []string{"chapter", "summary", "characters", "key_events"} {
+		if _, ok := fields[k]; !ok {
+			return out, fmt.Errorf("thiếu trường bắt buộc: %s", k)
+		}
+	}
+	if err := json.Unmarshal(fields["chapter"], &out.Chapter); err != nil {
+		return out, fmt.Errorf("chapter phải là số nguyên: %w", err)
+	}
+	if out.Chapter <= 0 {
+		return out, fmt.Errorf("chapter must be > 0")
+	}
+	if err := json.Unmarshal(fields["summary"], &out.Summary); err != nil || strings.TrimSpace(out.Summary) == "" {
+		return out, fmt.Errorf("summary phải là chuỗi không rỗng")
+	}
+	if err := decodeStringArray(fields["characters"], &out.Characters); err != nil || len(out.Characters) == 0 {
+		return out, fmt.Errorf("characters phải là mảng chuỗi không rỗng")
+	}
+	if err := decodeStringArray(fields["key_events"], &out.KeyEvents); err != nil || len(out.KeyEvents) == 0 {
+		return out, fmt.Errorf("key_events phải là mảng chuỗi không rỗng")
+	}
+	if rawField, ok := fields["timeline_events"]; ok {
+		r, err := normalizeJSONStringRaw(rawField)
+		if err != nil {
+			return out, fmt.Errorf("timeline_events: %w", err)
+		}
+		if err := validateObjectArray(r, "timeline_events", []string{"chapter", "time", "event", "characters"}, []string{"time", "event"}); err != nil {
+			return out, err
+		}
+		if err := json.Unmarshal(r, &out.TimelineEvents); err != nil {
+			return out, fmt.Errorf("timeline_events: %w", err)
+		}
+	}
+	if rawField, ok := fields["foreshadow_updates"]; ok {
+		r, err := normalizeJSONStringRaw(rawField)
+		if err != nil {
+			return out, fmt.Errorf("foreshadow_updates: %w", err)
+		}
+		if err := validateObjectArray(r, "foreshadow_updates", []string{"id", "action", "description"}, []string{"id", "action"}); err != nil {
+			return out, err
+		}
+		if err := json.Unmarshal(r, &out.ForeshadowUpdates); err != nil {
+			return out, fmt.Errorf("foreshadow_updates: %w", err)
+		}
+		for i, f := range out.ForeshadowUpdates {
+			if f.Action != "plant" && f.Action != "advance" && f.Action != "resolve" {
+				return out, fmt.Errorf("foreshadow_updates[%d].action không hợp lệ: %q", i, f.Action)
+			}
+		}
+	}
+	if rawField, ok := fields["relationship_changes"]; ok {
+		r, err := normalizeJSONStringRaw(rawField)
+		if err != nil {
+			return out, fmt.Errorf("relationship_changes: %w", err)
+		}
+		if err := validateObjectArray(r, "relationship_changes", []string{"chapter", "character_a", "character_b", "relation"}, []string{"character_a", "character_b", "relation"}); err != nil {
+			return out, err
+		}
+		if err := json.Unmarshal(r, &out.RelationshipChanges); err != nil {
+			return out, fmt.Errorf("relationship_changes: %w", err)
+		}
+	}
+	if rawField, ok := fields["state_changes"]; ok {
+		r, err := normalizeJSONStringRaw(rawField)
+		if err != nil {
+			return out, fmt.Errorf("state_changes: %w", err)
+		}
+		if err := validateObjectArray(r, "state_changes", []string{"chapter", "entity", "field", "old_value", "new_value", "reason"}, []string{"entity", "field", "new_value"}); err != nil {
+			return out, err
+		}
+		if err := json.Unmarshal(r, &out.StateChanges); err != nil {
+			return out, fmt.Errorf("state_changes: %w", err)
+		}
+	}
+	if rawField, ok := fields["cast_intros"]; ok {
+		r, err := normalizeJSONStringRaw(rawField)
+		if err != nil {
+			return out, fmt.Errorf("cast_intros: %w", err)
+		}
+		if err := validateObjectArray(r, "cast_intros", []string{"name", "brief_role"}, []string{"name", "brief_role"}); err != nil {
+			return out, err
+		}
+		if err := json.Unmarshal(r, &out.CastIntros); err != nil {
+			return out, fmt.Errorf("cast_intros: %w", err)
+		}
+	}
+	if rawField, ok := fields["hook_type"]; ok {
+		if err := json.Unmarshal(rawField, &out.HookType); err != nil {
+			return out, fmt.Errorf("hook_type phải là chuỗi: %w", err)
+		}
+		if out.HookType != "" && out.HookType != "crisis" && out.HookType != "mystery" && out.HookType != "desire" && out.HookType != "emotion" && out.HookType != "choice" {
+			return out, fmt.Errorf("hook_type không hợp lệ: %q", out.HookType)
+		}
+	}
+	if rawField, ok := fields["dominant_strand"]; ok {
+		if err := json.Unmarshal(rawField, &out.DominantStrand); err != nil {
+			return out, fmt.Errorf("dominant_strand phải là chuỗi: %w", err)
+		}
+		if out.DominantStrand != "" && out.DominantStrand != "quest" && out.DominantStrand != "fire" && out.DominantStrand != "constellation" {
+			return out, fmt.Errorf("dominant_strand không hợp lệ: %q", out.DominantStrand)
+		}
+	}
+	if rawField, ok := fields["feedback"]; ok {
+		r, err := normalizeJSONStringRaw(rawField)
+		if err != nil {
+			return out, fmt.Errorf("feedback: %w", err)
+		}
+		if err := validateObject(r, "feedback", []string{"deviation", "suggestion"}, []string{"deviation", "suggestion"}); err != nil {
+			return out, err
+		}
+		if err := json.Unmarshal(r, &out.Feedback); err != nil {
+			return out, fmt.Errorf("feedback: %w", err)
+		}
+	}
+	return out, nil
+}
+
+func normalizeRootObject(raw json.RawMessage) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("tham số rỗng")
+	}
+	if trimmed[0] == '{' {
+		return trimmed, nil
+	}
+	var s string
+	if err := json.Unmarshal(trimmed, &s); err != nil {
+		return nil, err
+	}
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "{") {
+		return json.RawMessage(s), nil
+	}
+	obj := extractFirstJSONObject(s)
+	if obj == "" {
+		return nil, fmt.Errorf("không tìm thấy JSON object")
+	}
+	return json.RawMessage(obj), nil
+}
+
+func normalizeJSONStringRaw(raw json.RawMessage) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("giá trị rỗng")
+	}
+	if trimmed[0] != '"' {
+		return trimmed, nil
+	}
+	var s string
+	if err := json.Unmarshal(trimmed, &s); err != nil {
+		return nil, err
+	}
+	s = strings.TrimSpace(s)
+	if !json.Valid([]byte(s)) {
+		return nil, fmt.Errorf("chuỗi không chứa JSON hợp lệ")
+	}
+	return json.RawMessage(s), nil
+}
+
+func decodeStringArray(raw json.RawMessage, out *[]string) error {
+	r, err := normalizeJSONStringRaw(raw)
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(r)) == 0 || bytes.TrimSpace(r)[0] != '[' {
+		return fmt.Errorf("expected array")
+	}
+	return json.Unmarshal(r, out)
+}
+
+func validateObjectArray(raw json.RawMessage, field string, allowed, required []string) error {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.TrimSpace(raw)[0] != '[' {
+		return fmt.Errorf("%s phải là JSON array", field)
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return fmt.Errorf("%s: %w", field, err)
+	}
+	for i, item := range items {
+		if err := validateObject(item, fmt.Sprintf("%s[%d]", field, i), allowed, required); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateObject(raw json.RawMessage, path string, allowed, required []string) error {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.TrimSpace(raw)[0] != '{' {
+		return fmt.Errorf("%s phải là JSON object", path)
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	allowedSet := map[string]bool{}
+	for _, k := range allowed {
+		allowedSet[k] = true
+	}
+	for k := range fields {
+		if !allowedSet[k] {
+			return fmt.Errorf("%s.%s không thuộc schema", path, k)
+		}
+	}
+	for _, k := range required {
+		rawValue, ok := fields[k]
+		if !ok {
+			return fmt.Errorf("thiếu trường bắt buộc: %s.%s", path, k)
+		}
+		var s string
+		if err := json.Unmarshal(rawValue, &s); err != nil || strings.TrimSpace(s) == "" {
+			return fmt.Errorf("%s.%s phải là chuỗi không rỗng", path, k)
+		}
+	}
+	return nil
+}
+
+func extractFirstJSONObject(s string) string {
+	start := strings.IndexByte(s, '{')
+	if start < 0 {
+		return ""
+	}
+	depth := 0
+	inString := false
+	escape := false
+	for i := start; i < len(s); i++ {
+		c := s[i]
+		if inString {
+			if escape {
+				escape = false
+				continue
+			}
+			switch c {
+			case '\\':
+				escape = true
+			case '"':
+				inString = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return s[start : i+1]
+			}
+		}
+	}
+	return ""
 }
 
 func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (json.RawMessage, error) {
-	var a struct {
-		Chapter             int                        `json:"chapter"`
-		Summary             string                     `json:"summary"`
-		Characters          []string                   `json:"characters"`
-		KeyEvents           []string                   `json:"key_events"`
-		TimelineEvents      []domain.TimelineEvent     `json:"timeline_events"`
-		ForeshadowUpdates   []domain.ForeshadowUpdate  `json:"foreshadow_updates"`
-		RelationshipChanges []domain.RelationshipEntry `json:"relationship_changes"`
-		StateChanges        []domain.StateChange       `json:"state_changes"`
-		CastIntros          []domain.CastIntro         `json:"cast_intros"`
-		HookType            string                     `json:"hook_type"`
-		DominantStrand      string                     `json:"dominant_strand"`
-		Feedback            *domain.OutlineFeedback    `json:"feedback"`
-	}
-	if err := json.Unmarshal(args, &a); err != nil {
-		return nil, fmt.Errorf("invalid args: %w: %w", errs.ErrToolArgs, err)
-	}
-	if a.Chapter <= 0 {
-		return nil, fmt.Errorf("chapter must be > 0: %w", errs.ErrToolArgs)
+	a, err := decodeCommitChapterArgs(args)
+	if err != nil {
+		return nil, fmt.Errorf("tham số không hợp lệ: %w: %w", errs.ErrToolArgs, err)
 	}
 	if t.store.Progress.IsChapterCompleted(a.Chapter) {
 		// 清理可能残留的 PendingCommit（崩溃发生在 ProgressMarked 之后、ClearPendingCommit 之前）
@@ -133,14 +413,14 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		return nil, fmt.Errorf("load pending commit: %w: %w", errs.ErrStoreRead, err)
 	}
 	if existingPending != nil && existingPending.Chapter != a.Chapter {
-		return nil, fmt.Errorf("存在未恢复的章节提交：第 %d 章（阶段 %s），请先恢复或重新提交该章: %w", existingPending.Chapter, existingPending.Stage, errs.ErrToolConflict)
+		return nil, fmt.Errorf("Có lượt lưu chương chưa khôi phục: chương %d (giai đoạn %s), hãy khôi phục hoặc lưu lại chương đó trước: %w", existingPending.Chapter, existingPending.Stage, errs.ErrToolConflict)
 	}
 	if err := t.store.Progress.ValidateChapterWork(a.Chapter); err != nil {
 		// 队列冲突保持原样（已带 ErrToolConflict 分类）；其他 IO 错误归 Precondition。
 		if errors.Is(err, errs.ErrToolConflict) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("章节当前不允许提交: %w: %w", errs.ErrToolPrecondition, err)
+		return nil, fmt.Errorf("Chương hiện không được phép lưu: %w: %w", errs.ErrToolPrecondition, err)
 	}
 
 	// 分层模式越界拦截：必须先于任何写操作，否则越界 commit 会把章节文件、摘要、
@@ -149,11 +429,11 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	if progress, perr := t.store.Progress.Load(); perr == nil && progress != nil && progress.Layered {
 		b, bErr := t.store.Outline.CheckArcBoundary(a.Chapter)
 		if bErr != nil {
-			return nil, fmt.Errorf("弧边界检测失败 chapter=%d: %w: %w", a.Chapter, errs.ErrStoreRead, bErr)
+			return nil, fmt.Errorf("Kiểm tra ranh giới cung thất bại chapter=%d: %w: %w", a.Chapter, errs.ErrStoreRead, bErr)
 		}
 		if b == nil {
 			return nil, fmt.Errorf(
-				"第 %d 章不在分层大纲范围内：写作必须先 expand_arc 扩展弧或 append_volume 追加卷；若全书已完结请调 save_foundation type=complete_book: %w",
+				"Chương %d không nằm trong phạm vi dàn ý phân tầng: cần gọi expand_arc để mở rộng cung hoặc append_volume để thêm tập trước; nếu sách đã hoàn tất hãy gọi save_foundation type=complete_book: %w",
 				a.Chapter, errs.ErrToolPrecondition)
 		}
 		boundary = b
@@ -399,11 +679,11 @@ func (t *CommitChapterTool) executeRewriteCommit(
 	// 拒绝 commit，强制 writer 先调 draft_chapter(mode=write) 写入新版本。
 	existingFinal, _ := t.store.Drafts.LoadChapterText(chapter)
 	if existingFinal != "" && existingFinal == content {
-		mode := "重写"
+		mode := "viết lại"
 		if progress != nil && progress.Flow == domain.FlowPolishing {
-			mode = "打磨"
+			mode = "chỉnh sửa"
 		}
-		return nil, fmt.Errorf("第 %d 章 drafts 与 chapters 内容完全相同，未检测到%s改动。请先调 draft_chapter(mode=write, chapter=%d) 写入%s后的新正文，再 commit_chapter: %w",
+		return nil, fmt.Errorf("Nội dung drafts và chapters của chương %d hoàn toàn giống nhau, chưa phát hiện thay đổi %s. Hãy gọi draft_chapter(mode=write, chapter=%d) để ghi bản mới sau khi %s, rồi mới commit_chapter: %w",
 			chapter, mode, chapter, mode, errs.ErrToolPrecondition)
 	}
 

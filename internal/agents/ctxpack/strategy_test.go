@@ -11,6 +11,18 @@ import (
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
 
+func TestWriterRestorePromptsAreVietnamese(t *testing.T) {
+	all := WriterSummarySystemPrompt + WriterSummaryPrompt + WriterUpdateSummaryPrompt + WriterTurnPrefixPrompt
+	for _, bad := range []string{"当前进度", "角色即时状态", "下一步", "第几章"} {
+		if strings.Contains(all, bad) {
+			t.Fatalf("restore prompts contain Chinese marker %q", bad)
+		}
+	}
+	if !strings.Contains(all, "Tiến độ hiện tại") || !strings.Contains(all, "Viết bằng tiếng Việt") {
+		t.Fatalf("restore prompts should instruct Vietnamese summaries")
+	}
+}
+
 func TestStoreSummaryCompactApplyUsesPersistentStoreData(t *testing.T) {
 	s := seededWriterStore(t)
 	strategy := NewStoreSummaryCompact(StoreSummaryCompactConfig{

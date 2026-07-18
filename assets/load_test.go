@@ -38,6 +38,20 @@ func TestBuildWriterPrompt_ByteIdenticalToPreSplit(t *testing.T) {
 }
 
 // TestLoad_NoOverrides 零覆盖时 Voice/AntiAITone 与内置逐字节一致。
+func TestWriterPromptCommitChapterContract(t *testing.T) {
+	prompt := mustRead(promptsFS, "prompts/writer.md")
+	for _, want := range []string{
+		"state_changes` phải là JSON array thật, không phải chuỗi",
+		"Không bọc JSON trong Markdown code fence",
+		"Không stringify object hoặc array",
+		"Không thêm property ngoài schema",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("writer prompt missing %q", want)
+		}
+	}
+}
+
 func TestLoad_NoOverrides(t *testing.T) {
 	b := Load("default", LoadOptions{})
 	if b.Voice != mustRead(voiceFS, "voice.md") {

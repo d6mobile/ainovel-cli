@@ -46,8 +46,8 @@ func TestRoute_PendingRewritesFirst(t *testing.T) {
 	if got == nil || got.Agent != "writer" {
 		t.Fatalf("expected writer for rewrites, got %+v", got)
 	}
-	if got.Task != "重写第 3 章" {
-		t.Errorf("expected '重写第 3 章', got %q", got.Task)
+	if got.Task != "Viết lại chương 3" {
+		t.Errorf("expected 'Viết lại chương 3', got %q", got.Task)
 	}
 	if got.Chapter != 3 {
 		t.Errorf("expected Chapter=3, got %d", got.Chapter)
@@ -58,7 +58,7 @@ func TestRoute_PendingPolishingVerb(t *testing.T) {
 	p := writingProgress([]int{1}, domain.FlowPolishing)
 	p.PendingRewrites = []int{2}
 	got := Route(State{Progress: p})
-	if got == nil || got.Task != "打磨第 2 章" {
+	if got == nil || got.Task != "Chỉnh sửa chương 2" {
 		t.Fatalf("expected polish verb, got %+v", got)
 	}
 }
@@ -189,8 +189,8 @@ func TestRoute_NormalContinue(t *testing.T) {
 	if got == nil || got.Agent != "writer" {
 		t.Fatalf("expected writer for next chapter, got %+v", got)
 	}
-	if got.Task != "写第 4 章" {
-		t.Errorf("expected '写第 4 章', got %q", got.Task)
+	if got.Task != "Viết chương 4" {
+		t.Errorf("expected 'Viết chương 4', got %q", got.Task)
 	}
 	if got.Chapter != 4 {
 		t.Errorf("expected Chapter=4, got %d", got.Chapter)

@@ -106,14 +106,14 @@ func Route(s State) *Instruction {
 	// 3. 重写/打磨队列优先（事实已在工具层落盘，Router 只照单派发）
 	if len(p.PendingRewrites) > 0 {
 		ch := p.PendingRewrites[0]
-		verb := "重写"
+		verb := "Viết lại"
 		if p.Flow == domain.FlowPolishing {
-			verb = "打磨"
+			verb = "Chỉnh sửa"
 		}
 		return &Instruction{
 			Agent:   "writer",
-			Task:    fmt.Sprintf("%s第 %d 章", verb, ch),
-			Reason:  fmt.Sprintf("PendingRewrites 队列剩余 %d 章", len(p.PendingRewrites)),
+			Task:    fmt.Sprintf("%s chương %d", verb, ch),
+			Reason:  fmt.Sprintf("Hàng đợi PendingRewrites còn %d chương", len(p.PendingRewrites)),
 			Chapter: ch,
 		}
 	}
@@ -188,8 +188,8 @@ func Route(s State) *Instruction {
 	}
 	return &Instruction{
 		Agent:   "writer",
-		Task:    fmt.Sprintf("写第 %d 章", next),
-		Reason:  "续写下一章",
+		Task:    fmt.Sprintf("Viết chương %d", next),
+		Reason:  "Viết tiếp chương kế tiếp",
 		Chapter: next,
 	}
 }

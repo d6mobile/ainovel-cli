@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -487,12 +488,12 @@ func (h *Host) Resume() (string, error) {
 	}
 	if h.cocreating {
 		h.mu.Unlock()
-		return "", fmt.Errorf("阶段共创进行中，请先结束共创")
+		return "", fmt.Errorf("đồng sáng tác theo giai đoạn đang chạy, hãy kết thúc trước")
 	}
 	if h.exclusive != "" {
 		ex := h.exclusive
 		h.mu.Unlock()
-		return "", fmt.Errorf("%s进行中，请先完成后再恢复创作", ex)
+		return "", fmt.Errorf("%s đang chạy, hãy hoàn tất trước khi khôi phục sáng tác", ex)
 	}
 	h.mu.Unlock()
 
@@ -507,11 +508,11 @@ func (h *Host) Resume() (string, error) {
 		return "", err
 	}
 
-	slog.Info("恢复创作", "module", "host", "label", label)
-	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "恢复创作: " + label, Level: "info"})
+	slog.Info("khôi phục sáng tác", "module", "host", "label", label)
+	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Khôi phục sáng tác: " + label, Level: "info"})
 	for _, w := range h.store.CheckConsistency() {
-		slog.Warn("一致性告警", "module", "host", "detail", w)
-		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "一致性告警: " + w, Level: "warn"})
+		slog.Warn("cảnh báo nhất quán", "module", "host", "detail", w)
+		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Cảnh báo nhất quán: " + w, Level: "warn"})
 	}
 	// 确保用户规则快照存在；已有则廉价读取。
 	h.ensureUserRules()
@@ -1159,16 +1160,16 @@ func (h *Host) fillDetails(snap *UISnapshot, progress *domain.Progress) {
 	if progress != nil && len(progress.CompletedChapters) > 0 {
 		lastCh := progress.CompletedChapters[len(progress.CompletedChapters)-1]
 		wc := progress.ChapterWordCounts[lastCh]
-		snap.LastCommitSummary = fmt.Sprintf("第%d章 %d字", lastCh, wc)
+		snap.LastCommitSummary = fmt.Sprintf("Chương %d · %d chữ", lastCh, wc)
 	}
 	currentCh := 1
 	if progress != nil && len(progress.CompletedChapters) > 0 {
 		currentCh = progress.CompletedChapters[len(progress.CompletedChapters)-1]
 	}
 	if review, err := h.store.World.LoadLastReview(currentCh); err == nil && review != nil {
-		snap.LastReviewSummary = fmt.Sprintf("verdict=%s %d个问题", review.Verdict, len(review.Issues))
+		snap.LastReviewSummary = fmt.Sprintf("verdict=%s · %d vấn đề", review.Verdict, len(review.Issues))
 		if len(review.AffectedChapters) > 0 {
-			snap.LastReviewSummary += fmt.Sprintf(" 影响%v", review.AffectedChapters)
+			snap.LastReviewSummary += fmt.Sprintf(" ảnh hưởng %v", review.AffectedChapters)
 		}
 	}
 	if cp := h.store.Checkpoints.LatestGlobal(); cp != nil {
@@ -1179,7 +1180,7 @@ func (h *Host) fillDetails(snap *UISnapshot, progress *domain.Progress) {
 			ch := progress.CompletedChapters[i]
 			if summary, err := h.store.Summaries.LoadSummary(ch); err == nil && summary != nil {
 				snap.RecentSummaries = append(snap.RecentSummaries,
-					fmt.Sprintf("第%d章: %s", ch, truncate(summary.Summary, 50)))
+					fmt.Sprintf("Chương %d: %s", ch, truncate(summary.Summary, 50)))
 			}
 		}
 	}
@@ -1368,7 +1369,56 @@ func (h *Host) ReplayQueue(afterSeq int64) ([]domain.RuntimeQueueItem, error) {
 	if h.store == nil || h.store.Runtime == nil {
 		return nil, nil
 	}
-	return h.store.Runtime.LoadQueueAfter(afterSeq)
+	items, err := h.store.Runtime.LoadQueueAfter(afterSeq)
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		sanitizeRuntimeQueueItem(&items[i])
+	}
+	return items, nil
+}
+
+func sanitizeRuntimeQueueItem(item *domain.RuntimeQueueItem) {
+	if item == nil || item.Kind != domain.RuntimeQueueUIEvent {
+		return
+	}
+	item.Summary = sanitizeGeneratedLabel(item.Summary)
+	switch p := item.Payload.(type) {
+	case Event:
+		p.Summary = sanitizeGeneratedLabel(p.Summary)
+		p.Detail = sanitizeGeneratedLabel(p.Detail)
+		item.Payload = p
+	case map[string]any:
+		if s, ok := p["Summary"].(string); ok {
+			p["Summary"] = sanitizeGeneratedLabel(s)
+		}
+		if s, ok := p["Detail"].(string); ok {
+			p["Detail"] = sanitizeGeneratedLabel(s)
+		}
+	}
+}
+
+func sanitizeGeneratedLabel(s string) string {
+	if s == "" {
+		return s
+	}
+	replacements := []struct{ old, new string }{
+		{"恢复创作", "Khôi phục sáng tác"},
+		{"恢复：", "Khôi phục: "},
+		{"恢复:", "Khôi phục:"},
+		{" 错误:", " lỗi:"},
+		{"·草稿", "·bản nháp"},
+		{"·对话", "·đối thoại"},
+		{"本弧", "cung này"},
+		{"全局", "toàn cục"},
+	}
+	for _, r := range replacements {
+		s = strings.ReplaceAll(s, r.old, r.new)
+	}
+	chapterLabelRe := regexp.MustCompile(`第\s*(\d+)\s*章`)
+	s = chapterLabelRe.ReplaceAllString(s, "chương $1")
+	return s
 }
 
 // ── 共创 ──

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/voocel/agentcore"
@@ -103,6 +104,27 @@ func TestSessionStore_NilLookup(t *testing.T) {
 	// 但其他字段（role/usage）必须正常
 	if entries[0]["role"] != "assistant" {
 		t.Errorf("role lost: %v", entries[0]["role"])
+	}
+}
+
+func TestSessionStore_SubAgentPathSupportsVietnameseAndLegacyChapterTasks(t *testing.T) {
+	s := NewSessionStore(newIO(t.TempDir()))
+	if got := s.subAgentPath("writer", "Viết chương 1"); got != "meta/sessions/agents/writer-ch01.jsonl" {
+		t.Fatalf("Vietnamese task path = %q", got)
+	}
+	if got := s.subAgentPath("writer", "写第 1 章"); got != "meta/sessions/agents/writer-ch01.jsonl" {
+		t.Fatalf("legacy Chinese task path = %q", got)
+	}
+}
+
+func TestCompactTextUsesVietnamesePlaceholder(t *testing.T) {
+	longText := strings.Repeat("a", 5000)
+	got := compactText(agentcore.RoleTool, "read_chapter", longText)
+	if strings.Contains(got, "见") || strings.Contains(got, "字") {
+		t.Fatalf("compact placeholder contains Chinese: %q", got)
+	}
+	if !strings.Contains(got, "ký tự") || !strings.Contains(got, "xem chapters/") {
+		t.Fatalf("compact placeholder should be Vietnamese, got %q", got)
 	}
 }
 

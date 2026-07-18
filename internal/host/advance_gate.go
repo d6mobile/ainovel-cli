@@ -32,16 +32,16 @@ func (g *ChapterAdvanceGate) HandleBoundary() bool {
 	}
 	meta, err := g.store.RunMeta.Load()
 	if err != nil {
-		return g.fail(fmt.Errorf("读取 RunMeta: %w", err))
+		return g.fail(fmt.Errorf("Đọc RunMeta: %w", err))
 	}
 	if meta == nil {
-		return g.fail(fmt.Errorf("RunMeta 未初始化"))
+		return g.fail(fmt.Errorf("RunMeta chưa được khởi tạo"))
 	}
 	if !meta.AdvanceMode.Valid() {
 		return g.fail(&domain.UnsupportedAdvanceModeError{Mode: meta.AdvanceMode})
 	}
 	if meta.AdvanceMode == domain.ChapterAdvanceAuto && meta.AdvancePermitChapter != 0 {
-		return g.fail(fmt.Errorf("auto 模式残留第 %d 章许可", meta.AdvancePermitChapter))
+		return g.fail(fmt.Errorf("Chế độ auto còn sót giấy phép chương %d", meta.AdvancePermitChapter))
 	}
 
 	if meta.AdvanceHold != nil {
@@ -94,37 +94,37 @@ func (g *ChapterAdvanceGate) reconcilePermit(permit int) bool {
 		return false
 	}
 	if permit < 0 {
-		return g.fail(fmt.Errorf("章节许可不能为负数: %d", permit))
+		return g.fail(fmt.Errorf("Giấy phép chương không được âm: %d", permit))
 	}
 	progress, err := g.store.Progress.Load()
 	if err != nil {
-		return g.fail(fmt.Errorf("读取 Progress 对账章节许可: %w", err))
+		return g.fail(fmt.Errorf("Đọc Progress để đối chiếu giấy phép chương: %w", err))
 	}
 	if progress == nil {
-		return g.fail(fmt.Errorf("缺少 Progress，无法对账第 %d 章许可", permit))
+		return g.fail(fmt.Errorf("Thiếu Progress, không thể đối chiếu giấy phép chương %d", permit))
 	}
 	pending, err := g.store.Signals.LoadPendingCommit()
 	if err != nil {
-		return g.fail(fmt.Errorf("读取 PendingCommit 对账章节许可: %w", err))
+		return g.fail(fmt.Errorf("Đọc PendingCommit để đối chiếu giấy phép chương: %w", err))
 	}
 	completed := slices.Contains(progress.CompletedChapters, permit)
 	if completed {
 		if pending != nil {
 			if pending.Chapter != permit {
-				return g.fail(fmt.Errorf("第 %d 章许可与第 %d 章 PendingCommit 冲突", permit, pending.Chapter))
+				return g.fail(fmt.Errorf("Giấy phép chương %d xung đột với PendingCommit chương %d", permit, pending.Chapter))
 			}
 			return false
 		}
 		if g.store.Checkpoints.LatestByStep(domain.ChapterScope(permit), "commit") == nil {
-			return g.fail(fmt.Errorf("第 %d 章已标记完成但缺少 commit checkpoint", permit))
+			return g.fail(fmt.Errorf("Chương %d đã đánh dấu hoàn thành nhưng thiếu commit checkpoint", permit))
 		}
 		if err := g.store.RunMeta.ClearAdvancePermit(permit); err != nil {
-			return g.fail(fmt.Errorf("消费第 %d 章许可: %w", permit, err))
+			return g.fail(fmt.Errorf("Tiêu thụ giấy phép chương %d: %w", permit, err))
 		}
 		return false
 	}
 	if permit != progress.NextChapter() {
-		return g.fail(fmt.Errorf("第 %d 章许可与当前下一章 %d 不一致", permit, progress.NextChapter()))
+		return g.fail(fmt.Errorf("Giấy phép chương %d không khớp chương kế tiếp hiện tại %d", permit, progress.NextChapter()))
 	}
 	return false
 }
@@ -136,27 +136,27 @@ func (g *ChapterAdvanceGate) Allow(inst *flow.Instruction) (bool, error) {
 	}
 	meta, err := g.store.RunMeta.Load()
 	if err != nil {
-		return false, fmt.Errorf("读取 RunMeta: %w", err)
+		return false, fmt.Errorf("Đọc RunMeta: %w", err)
 	}
 	if meta == nil {
-		return false, fmt.Errorf("RunMeta 未初始化")
+		return false, fmt.Errorf("RunMeta chưa được khởi tạo")
 	}
 	if !meta.AdvanceMode.Valid() {
 		return false, &domain.UnsupportedAdvanceModeError{Mode: meta.AdvanceMode}
 	}
 	if meta.AdvanceMode == domain.ChapterAdvanceAuto {
 		if meta.AdvancePermitChapter != 0 {
-			return false, fmt.Errorf("auto 模式残留第 %d 章许可", meta.AdvancePermitChapter)
+			return false, fmt.Errorf("Chế độ auto còn sót giấy phép chương %d", meta.AdvancePermitChapter)
 		}
 		return true, nil
 	}
 	progress, err := g.store.Progress.Load()
 	if err != nil {
-		return false, fmt.Errorf("读取 Progress: %w", err)
+		return false, fmt.Errorf("Đọc Progress: %w", err)
 	}
 	pending, err := g.store.Signals.LoadPendingCommit()
 	if err != nil {
-		return false, fmt.Errorf("读取 PendingCommit: %w", err)
+		return false, fmt.Errorf("Đọc PendingCommit: %w", err)
 	}
 	if !flow.StartsForwardChapter(inst, progress, pending) {
 		return true, nil
@@ -169,19 +169,19 @@ func (g *ChapterAdvanceGate) Allow(inst *flow.Instruction) (bool, error) {
 		return true, nil
 	}
 	if meta.AdvancePermitChapter != 0 {
-		return false, fmt.Errorf("第 %d 章派发与第 %d 章许可不一致", target, meta.AdvancePermitChapter)
+		return false, fmt.Errorf("Lượt điều phối chương %d không khớp giấy phép chương %d", target, meta.AdvancePermitChapter)
 	}
 	latest := progress.LatestCompleted()
-	message := fmt.Sprintf("已完成至第 %d 章，逐章验收等待放行第 %d 章；使用 /next 生成，或输入修改意见", latest, target)
+	message := fmt.Sprintf("Đã hoàn thành đến chương %d, nghiệm thu từng chương đang chờ cho phép chương %d; dùng /next để tạo, hoặc nhập ý kiến chỉnh sửa", latest, target)
 	if latest == 0 {
-		message = fmt.Sprintf("规划已就绪，逐章验收等待放行第 %d 章；使用 /next 生成，或输入修改意见", target)
+		message = fmt.Sprintf("Dàn ý đã sẵn sàng, nghiệm thu từng chương đang chờ cho phép chương %d; dùng /next để tạo, hoặc nhập ý kiến chỉnh sửa", target)
 	}
 	g.pauseNow(message)
 	return false, nil
 }
 
 func (g *ChapterAdvanceGate) fail(err error) bool {
-	g.pauseNow("章节推进控制错误，已暂停：" + err.Error())
+	g.pauseNow("Lỗi kiểm soát tiến độ chương, đã tạm dừng: " + err.Error())
 	return true
 }
 

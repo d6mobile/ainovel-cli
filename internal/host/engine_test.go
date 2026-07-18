@@ -95,7 +95,7 @@ func testTextMsg(text string) agentcore.Message {
 	}
 }
 
-var chapterRe = regexp.MustCompile(`写第 (\d+) 章`)
+var chapterRe = regexp.MustCompile(`(?:Viết chương|Viết lại chương|Chỉnh sửa chương)\s+(\d+)|(?:写第|重写第)\s*(\d+)\s*章`)
 
 // scriptedWriterModel 按对话内已有的 tool 结果数决定下一步,
 // 走完整 plan → draft → check → commit 序列(真实工具,真实落盘)。
@@ -106,7 +106,11 @@ func scriptedWriterModel() *scriptedChatModel {
 		for _, m := range msgs {
 			if m.Role == agentcore.RoleUser {
 				if match := chapterRe.FindStringSubmatch(m.TextContent()); match != nil {
-					chapter, _ = strconv.Atoi(match[1])
+					chapterText := match[1]
+					if chapterText == "" {
+						chapterText = match[2]
+					}
+					chapter, _ = strconv.Atoi(chapterText)
 				}
 			}
 			if m.Role == agentcore.RoleTool {

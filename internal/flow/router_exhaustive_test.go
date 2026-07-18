@@ -90,9 +90,9 @@ func classify(t *testing.T, inst *Instruction) expectKind {
 	switch inst.Agent {
 	case "writer":
 		switch {
-		case contains(inst.Task, "重写") || contains(inst.Task, "打磨"):
+		case contains(inst.Task, "Viết lại") || contains(inst.Task, "Chỉnh sửa") || contains(inst.Task, "重写") || contains(inst.Task, "打磨"):
 			return expectRewrite
-		case contains(inst.Task, "写第"):
+		case contains(inst.Task, "Viết chương") || contains(inst.Task, "写第"):
 			return expectNextChapter
 		}
 	case "editor":
@@ -297,9 +297,9 @@ func assertConservation(t *testing.T, s State, inst *Instruction) {
 			if inst.Chapter != p.PendingRewrites[0] {
 				t.Fatalf("重写队列非空时必须派队列头 %d，got %d", p.PendingRewrites[0], inst.Chapter)
 			}
-			wantVerb := "重写"
+			wantVerb := "Viết lại"
 			if p.Flow == domain.FlowPolishing {
-				wantVerb = "打磨"
+				wantVerb = "Chỉnh sửa"
 			}
 			if !contains(inst.Task, wantVerb) {
 				t.Fatalf("队列任务动词应为 %q：%q", wantVerb, inst.Task)

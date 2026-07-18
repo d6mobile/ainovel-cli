@@ -1,10 +1,12 @@
 package host
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/voocel/agentcore"
+	"github.com/voocel/ainovel-cli/internal/domain"
 )
 
 func testObserver(events *[]Event) *observer {
@@ -54,6 +56,48 @@ func TestObserverSubagentRetryEventsUpdateSameLinePerAgent(t *testing.T) {
 	}
 	if events[1].RetryAt.IsZero() || !strings.Contains(events[1].Detail, "重试 (2/7，2s后)") {
 		t.Fatalf("event = %+v, want RetryAt deadline + static delay in Detail", events[1])
+	}
+}
+
+func TestDisplayToolNameVietnameseChapterLabels(t *testing.T) {
+	cases := []struct {
+		tool string
+		args string
+	}{
+		{"commit_chapter", `{"chapter":1}`},
+		{"novel_context", `{"chapter":1}`},
+		{"read_chapter", `{"chapter":1,"source":"draft"}`},
+	}
+	for _, tc := range cases {
+		got := displayToolName(tc.tool, json.RawMessage(tc.args))
+		if strings.Contains(got, "第") || strings.Contains(got, "草稿") || strings.Contains(got, "对话") {
+			t.Fatalf("displayToolName(%s) = %q contains Chinese label", tc.tool, got)
+		}
+		if !strings.Contains(got, "chương 1") {
+			t.Fatalf("displayToolName(%s) = %q, want Vietnamese chapter label", tc.tool, got)
+		}
+	}
+}
+
+func TestSanitizeRuntimeQueueItemLegacyChineseLabels(t *testing.T) {
+	item := domain.RuntimeQueueItem{
+		Kind:    domain.RuntimeQueueUIEvent,
+		Summary: "commit_chapter(第1章)",
+		Payload: map[string]any{
+			"Summary": "commit_chapter 错误: bad",
+			"Detail":  "恢复创作: 恢复：第 1 章进行中",
+		},
+	}
+	sanitizeRuntimeQueueItem(&item)
+	if item.Summary != "commit_chapter(chương 1)" {
+		t.Fatalf("summary = %q", item.Summary)
+	}
+	payload := item.Payload.(map[string]any)
+	if payload["Summary"] != "commit_chapter lỗi: bad" {
+		t.Fatalf("payload summary = %q", payload["Summary"])
+	}
+	if got := payload["Detail"].(string); strings.Contains(got, "恢复") || strings.Contains(got, "第") {
+		t.Fatalf("payload detail not sanitized: %q", got)
 	}
 }
 
