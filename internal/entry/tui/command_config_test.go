@@ -218,3 +218,19 @@ func TestProviderMenuIsTwoLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderMenuShowsDeepSeekAndOllamaPresets(t *testing.T) {
+	state := &modelConfigState{snapshot: host.ModelConfigurationSnapshot{}}
+	state.buildProviderMenus()
+
+	labels := make([]string, 0, len(state.presetChoices))
+	for _, choice := range state.presetChoices {
+		if choice.preset != nil {
+			labels = append(labels, choice.preset.Label)
+		}
+	}
+
+	if !slices.Contains(labels, "DeepSeek") || !slices.Contains(labels, "Ollama") {
+		t.Fatalf("preset catalog phải có DeepSeek và Ollama, got %v", labels)
+	}
+}
