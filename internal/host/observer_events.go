@@ -13,9 +13,9 @@ import (
 
 func retryPrefix(attempt, maxRetries int, delay time.Duration) string {
 	if text := formatRetryDelay(delay); text != "" {
-		return fmt.Sprintf("重试 (%d/%d，%s后): ", attempt, maxRetries, text)
+		return fmt.Sprintf("Thử lại (%d/%d, sau %s): ", attempt, maxRetries, text)
 	}
-	return fmt.Sprintf("重试 (%d/%d): ", attempt, maxRetries)
+	return fmt.Sprintf("Thử lại (%d/%d): ", attempt, maxRetries)
 }
 
 func formatRetryDelay(delay time.Duration) string {
