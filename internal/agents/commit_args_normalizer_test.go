@@ -64,3 +64,83 @@ func TestNormalizeCommitChapterArgsRejectsStringifiedObjectForArray(t *testing.T
 		t.Fatal("expected error for object where array is required")
 	}
 }
+
+func TestNormalizeCommitChapterArgsRepairsObservedRelationshipKeyTypos(t *testing.T) {
+	raw := json.RawMessage(`{"chapter":1,"summary":"s","characters":["A"],"key_events":["e"],"relationship_changes":[{"character_a":"A","charaacter_b":"B","relation":"r1"},{"character_a":"A","chraactor_b":"C","relation":"r2"}]}`)
+	got, changed, err := normalizeCommitChapterArgs(raw)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true")
+	}
+	var obj struct {
+		RelationshipChanges []map[string]any `json:"relationship_changes"`
+	}
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := obj.RelationshipChanges[0]["character_b"]; got != "B" {
+		t.Fatalf("relationship_changes[0].character_b = %v, want B", got)
+	}
+	if _, ok := obj.RelationshipChanges[0]["charaacter_b"]; ok {
+		t.Fatal("relationship_changes[0].charaacter_b should be removed")
+	}
+	if got := obj.RelationshipChanges[1]["character_b"]; got != "C" {
+		t.Fatalf("relationship_changes[1].character_b = %v, want C", got)
+	}
+	if _, ok := obj.RelationshipChanges[1]["chraactor_b"]; ok {
+		t.Fatal("relationship_changes[1].chraactor_b should be removed")
+	}
+}
+
+func TestNormalizeCommitChapterArgsDropsObservedUnsupportedRootFields(t *testing.T) {
+	raw := json.RawMessage(`{"chapter":1,"title":"unsupported","summary":"s","characters":["A"],"key_events":["e"]}`)
+	got, changed, err := normalizeCommitChapterArgs(raw)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true")
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := obj["title"]; ok {
+		t.Fatal("title should be removed")
+	}
+	if got := obj["summary"]; got != "s" {
+		t.Fatalf("summary = %v, want s", got)
+	}
+}
+
+func TestNormalizeCommitChapterArgsRepairsObservedStateChangeFieldsEmbeddedInEntity(t *testing.T) {
+	raw := json.RawMessage(`{"chapter":1,"summary":"s","characters":["A"],"key_events":["e"],"state_changes":[{"entity":"Lâm Tịch, field: \"năng lực đặc biệt\", new_value: có thể đọc tâm thanh, reason: trọng sinh mang theo năng lực mới"}]}`)
+	got, changed, err := normalizeCommitChapterArgs(raw)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true")
+	}
+	var obj struct {
+		StateChanges []map[string]any `json:"state_changes"`
+	}
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	change := obj.StateChanges[0]
+	if got := change["entity"]; got != "Lâm Tịch" {
+		t.Fatalf("entity = %v, want Lâm Tịch", got)
+	}
+	if got := change["field"]; got != "năng lực đặc biệt" {
+		t.Fatalf("field = %v, want năng lực đặc biệt", got)
+	}
+	if got := change["new_value"]; got != "có thể đọc tâm thanh" {
+		t.Fatalf("new_value = %v, want có thể đọc tâm thanh", got)
+	}
+	if got := change["reason"]; got != "trọng sinh mang theo năng lực mới" {
+		t.Fatalf("reason = %v, want trọng sinh mang theo năng lực mới", got)
+	}
+}

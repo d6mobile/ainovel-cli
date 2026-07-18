@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/voocel/agentcore"
@@ -20,6 +21,26 @@ var commitArrayFields = map[string]bool{
 
 var commitObjectFields = map[string]bool{
 	"feedback": true,
+}
+
+var commitRootFields = map[string]bool{
+	"chapter":              true,
+	"summary":              true,
+	"characters":           true,
+	"key_events":           true,
+	"timeline_events":      true,
+	"foreshadow_updates":   true,
+	"relationship_changes": true,
+	"state_changes":        true,
+	"cast_intros":          true,
+	"hook_type":            true,
+	"dominant_strand":      true,
+	"feedback":             true,
+}
+
+var relationshipChangeKeyAliases = map[string]string{
+	"charaacter_b": "character_b",
+	"chraactor_b":  "character_b",
 }
 
 type commitArgsNormalizingModel struct {
@@ -111,6 +132,12 @@ func normalizeCommitChapterArgs(raw json.RawMessage) (json.RawMessage, bool, err
 		return nil, false, err
 	}
 	changed := rootChanged
+	for field := range obj {
+		if !commitRootFields[field] {
+			delete(obj, field)
+			changed = true
+		}
+	}
 	for field := range commitArrayFields {
 		v, ok := obj[field]
 		if !ok {
@@ -154,6 +181,12 @@ func normalizeCommitChapterArgs(raw json.RawMessage) (json.RawMessage, bool, err
 			return nil, false, fmt.Errorf("%s: expected JSON object inside string, got %T", field, parsed)
 		}
 		obj[field] = m
+		changed = true
+	}
+	if normalizeRelationshipChangeKeys(obj) {
+		changed = true
+	}
+	if normalizeStateChangeEmbeddedFields(obj) {
 		changed = true
 	}
 	if !changed {
@@ -203,6 +236,101 @@ func parseJSONStringValue(s string) (any, error) {
 		return nil, err
 	}
 	return parsed, nil
+}
+
+func normalizeRelationshipChangeKeys(obj map[string]any) bool {
+	changes, ok := obj["relationship_changes"].([]any)
+	if !ok {
+		return false
+	}
+	changed := false
+	for _, item := range changes {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for alias, canonical := range relationshipChangeKeyAliases {
+			value, ok := m[alias]
+			if !ok {
+				continue
+			}
+			if _, exists := m[canonical]; !exists {
+				m[canonical] = value
+			}
+			delete(m, alias)
+			changed = true
+		}
+	}
+	return changed
+}
+
+func normalizeStateChangeEmbeddedFields(obj map[string]any) bool {
+	changes, ok := obj["state_changes"].([]any)
+	if !ok {
+		return false
+	}
+	changed := false
+	for _, item := range changes {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		entity, ok := m["entity"].(string)
+		if !ok {
+			continue
+		}
+		parsed, ok := parseEmbeddedStateChangeEntity(entity)
+		if !ok {
+			continue
+		}
+		m["entity"] = parsed["entity"]
+		for _, key := range []string{"field", "old_value", "new_value", "reason"} {
+			if value := parsed[key]; value != "" {
+				if _, exists := m[key]; !exists {
+					m[key] = value
+				}
+			}
+		}
+		changed = true
+	}
+	return changed
+}
+
+type embeddedStateField struct {
+	key string
+	pos int
+}
+
+func parseEmbeddedStateChangeEntity(s string) (map[string]string, bool) {
+	fields := []embeddedStateField{}
+	for _, key := range []string{"field", "old_value", "new_value", "reason"} {
+		if pos := strings.Index(s, key+":"); pos >= 0 {
+			fields = append(fields, embeddedStateField{key: key, pos: pos})
+		}
+	}
+	if len(fields) == 0 {
+		return nil, false
+	}
+	sort.Slice(fields, func(i, j int) bool { return fields[i].pos < fields[j].pos })
+	out := map[string]string{
+		"entity": cleanEmbeddedStateValue(s[:fields[0].pos]),
+	}
+	for i, field := range fields {
+		start := field.pos + len(field.key) + 1
+		end := len(s)
+		if i+1 < len(fields) {
+			end = fields[i+1].pos
+		}
+		out[field.key] = cleanEmbeddedStateValue(s[start:end])
+	}
+	if out["entity"] == "" || out["field"] == "" || out["new_value"] == "" {
+		return nil, false
+	}
+	return out, true
+}
+
+func cleanEmbeddedStateValue(s string) string {
+	return strings.Trim(strings.TrimSpace(s), " ,\"")
 }
 
 func extractFirstJSONObject(s string) string {
