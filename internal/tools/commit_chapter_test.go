@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,12 +25,121 @@ func TestCommitChapterSchemaDescribesFeedbackAsObject(t *testing.T) {
 		t.Fatalf("feedback schema missing: %#v", props["feedback"])
 	}
 	desc, _ := feedback["description"].(string)
-	if !strings.Contains(desc, "JSON object") || !strings.Contains(desc, "字符串化 JSON") {
+	if !strings.Contains(desc, "JSON object") || !strings.Contains(desc, "chuỗi JSON") {
 		t.Fatalf("feedback description should warn against stringified JSON, got %q", desc)
 	}
 	if got := feedback["type"]; got != "object" {
 		t.Fatalf("feedback type = %v, want object", got)
 	}
+}
+
+func setupCommitValidationStore(t *testing.T) (string, *store.Store) {
+	t.Helper()
+	dir := t.TempDir()
+	s := store.NewStore(dir)
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Init("test", 3); err != nil {
+		t.Fatalf("InitProgress: %v", err)
+	}
+	if err := s.Drafts.SaveDraft(1, "Nội dung chương một đủ để lưu."); err != nil {
+		t.Fatalf("SaveDraft: %v", err)
+	}
+	return dir, s
+}
+
+func assertCommitValidationDidNotMutate(t *testing.T, dir string, s *store.Store) {
+	t.Helper()
+	p, err := s.Progress.Load()
+	if err != nil {
+		t.Fatalf("LoadProgress: %v", err)
+	}
+	if len(p.CompletedChapters) != 0 {
+		t.Fatalf("completed mutated: %v", p.CompletedChapters)
+	}
+	if cp := s.Checkpoints.LatestByStep(domain.ChapterScope(1), "commit"); cp != nil {
+		t.Fatalf("unexpected commit checkpoint: %+v", cp)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "chapters", "01.md")); !os.IsNotExist(err) {
+		t.Fatalf("chapter file should not exist: %v", err)
+	}
+}
+
+func TestCommitChapterRejectsUnknownPropertyBeforeWrite(t *testing.T) {
+	dir, s := setupCommitValidationStore(t)
+	tool := NewCommitChapterTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"chapter": 1, "title": "Không thuộc schema", "summary": "Tóm tắt",
+		"characters": []string{"A"}, "key_events": []string{"Sự kiện"},
+	})
+	if _, err := tool.Execute(context.Background(), args); err == nil {
+		t.Fatal("expected unknown property to be rejected")
+	}
+	assertCommitValidationDidNotMutate(t, dir, s)
+}
+
+func TestCommitChapterRejectsMissingRequiredBeforeWrite(t *testing.T) {
+	dir, s := setupCommitValidationStore(t)
+	tool := NewCommitChapterTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"chapter": 1, "summary": "Tóm tắt", "characters": []string{"A"},
+	})
+	if _, err := tool.Execute(context.Background(), args); err == nil {
+		t.Fatal("expected missing key_events to be rejected")
+	}
+	assertCommitValidationDidNotMutate(t, dir, s)
+}
+
+func TestCommitChapterAcceptsStringifiedStateChangesAfterGuardedParse(t *testing.T) {
+	_, s := setupCommitValidationStore(t)
+	tool := NewCommitChapterTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"chapter": 1, "summary": "Tóm tắt", "characters": []string{"A"}, "key_events": []string{"Sự kiện"},
+		"state_changes": `[{"entity":"A","field":"status","new_value":"awake"}]`,
+	})
+	if _, err := tool.Execute(context.Background(), args); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	changes, err := s.World.LoadStateChanges()
+	if err != nil {
+		t.Fatalf("LoadStateChanges: %v", err)
+	}
+	if len(changes) != 1 || changes[0].Entity != "A" || changes[0].Chapter != 1 {
+		t.Fatalf("unexpected state changes: %+v", changes)
+	}
+}
+
+func TestCommitChapterAcceptsStringifiedTimelineEventsAfterGuardedParse(t *testing.T) {
+	_, s := setupCommitValidationStore(t)
+	tool := NewCommitChapterTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"chapter": 1, "summary": "Tóm tắt", "characters": []string{"A"}, "key_events": []string{"Sự kiện"},
+		"timeline_events": `[{"time":"sáng","event":"A thức dậy","characters":["A"]}]`,
+	})
+	if _, err := tool.Execute(context.Background(), args); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	events, err := s.World.LoadTimeline()
+	if err != nil {
+		t.Fatalf("LoadTimeline: %v", err)
+	}
+	if len(events) != 1 || events[0].Event != "A thức dậy" || events[0].Chapter != 1 {
+		t.Fatalf("unexpected timeline events: %+v", events)
+	}
+}
+
+func TestCommitChapterRejectsStateChangeMissingRequiredField(t *testing.T) {
+	dir, s := setupCommitValidationStore(t)
+	tool := NewCommitChapterTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"chapter": 1, "summary": "Tóm tắt", "characters": []string{"A"}, "key_events": []string{"Sự kiện"},
+		"state_changes": []any{map[string]any{"entity": "A", "field": "status"}},
+	})
+	if _, err := tool.Execute(context.Background(), args); err == nil {
+		t.Fatal("expected missing state_changes[0].new_value to be rejected")
+	}
+	assertCommitValidationDidNotMutate(t, dir, s)
 }
 
 func TestCommitChapterRejectsNonPendingRewrite(t *testing.T) {

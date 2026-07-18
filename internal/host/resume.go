@@ -27,31 +27,31 @@ func resumeLabel(store *storepkg.Store) (string, error) {
 func describeResume(store *storepkg.Store, progress *domain.Progress) string {
 	switch progress.Phase {
 	case domain.PhasePremise, domain.PhaseOutline:
-		return fmt.Sprintf("恢复：规划阶段（%s）", progress.Phase)
+		return fmt.Sprintf("Khôi phục: giai đoạn lập kế hoạch (%s)", progress.Phase)
 	case domain.PhaseWriting:
-		// 优先级与 Router 的决策优先级对齐，让 label 与即将派发的指令一致。
+		// Ưu tiên khớp thứ tự quyết định của Router để label phản ánh đúng bước sắp chạy.
 		if pending, _ := store.Signals.LoadPendingCommit(); pending != nil {
-			return fmt.Sprintf("恢复：第 %d 章提交中断", pending.Chapter)
+			return fmt.Sprintf("Khôi phục: chương %d đang lưu dở", pending.Chapter)
 		}
 		if len(progress.PendingRewrites) > 0 {
-			verb := "重写"
+			verb := "viết lại"
 			if progress.Flow == domain.FlowPolishing {
-				verb = "打磨"
+				verb = "chỉnh sửa"
 			}
-			return fmt.Sprintf("%s恢复：%d 章待处理", verb, len(progress.PendingRewrites))
+			return fmt.Sprintf("Khôi phục: còn %d chương cần %s", len(progress.PendingRewrites), verb)
 		}
 		if progress.Flow == domain.FlowReviewing {
-			return "恢复：审阅中断"
+			return "Khôi phục: đánh giá bị gián đoạn"
 		}
 		if progress.InProgressChapter > 0 {
-			return fmt.Sprintf("恢复：第 %d 章进行中", progress.InProgressChapter)
+			return fmt.Sprintf("Khôi phục: chương %d đang thực hiện", progress.InProgressChapter)
 		}
 		if label := describeArcEndLabel(store, progress); label != "" {
 			return label
 		}
-		return fmt.Sprintf("恢复：从第 %d 章继续", progress.NextChapter())
+		return fmt.Sprintf("Khôi phục: tiếp tục từ chương %d", progress.NextChapter())
 	}
-	return "恢复"
+	return "Khôi phục"
 }
 
 // describeArcEndLabel 为弧末/卷末的多种中间状态生成贴合 UI 的标签。
@@ -68,15 +68,15 @@ func describeArcEndLabel(store *storepkg.Store, progress *domain.Progress) strin
 	vol, arc := boundary.Volume, boundary.Arc
 	switch {
 	case !store.World.HasArcReview(lastCh):
-		return fmt.Sprintf("恢复：弧末评审待处理（V%d A%d）", vol, arc)
+		return fmt.Sprintf("Khôi phục: chờ đánh giá cuối cung (T%d C%d)", vol, arc)
 	case !store.Summaries.HasArcSummary(vol, arc):
-		return fmt.Sprintf("恢复：弧摘要待生成（V%d A%d）", vol, arc)
+		return fmt.Sprintf("Khôi phục: chờ tạo tóm tắt cung (T%d C%d)", vol, arc)
 	case boundary.IsVolumeEnd && !store.Summaries.HasVolumeSummary(vol):
-		return fmt.Sprintf("恢复：卷摘要待生成（V%d）", vol)
+		return fmt.Sprintf("Khôi phục: chờ tạo tóm tắt tập (T%d)", vol)
 	case boundary.NeedsExpansion && boundary.NextArc > 0:
-		return fmt.Sprintf("恢复：待展开下一弧（V%d A%d）", boundary.NextVolume, boundary.NextArc)
+		return fmt.Sprintf("Khôi phục: chờ mở rộng cung tiếp theo (T%d C%d)", boundary.NextVolume, boundary.NextArc)
 	case boundary.NeedsNewVolume:
-		return fmt.Sprintf("恢复：待决策下一卷（V%d 末）", vol)
+		return fmt.Sprintf("Khôi phục: chờ quyết định tập tiếp theo (cuối T%d)", vol)
 	}
 	return ""
 }

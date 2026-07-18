@@ -138,18 +138,23 @@ func (s *SessionStore) subAgentPath(agentName, task string) string {
 	return fmt.Sprintf("meta/sessions/agents/%s-%s.jsonl", agentName, suffix)
 }
 
-var chapterRe = regexp.MustCompile(`第\s*(\d+)\s*章`)
+var chapterRes = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)chương\s*(\d+)`),
+	regexp.MustCompile(`第\s*(\d+)\s*章`),
+}
 
 func extractChapter(task string) string {
-	m := chapterRe.FindStringSubmatch(task)
-	if len(m) < 2 {
-		return ""
+	for _, re := range chapterRes {
+		m := re.FindStringSubmatch(task)
+		if len(m) < 2 {
+			continue
+		}
+		n, _ := strconv.Atoi(m[1])
+		if n > 0 {
+			return fmt.Sprintf("ch%02d", n)
+		}
 	}
-	n, _ := strconv.Atoi(m[1])
-	if n <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("ch%02d", n)
+	return ""
 }
 
 // compactMessage 克隆消息并替换大内容。
@@ -197,11 +202,11 @@ func compactText(role agentcore.Role, toolName, text string) string {
 		return fmt.Sprintf("[session_compact: novel_context %dB | %s]", len(text), summary)
 	case "read_chapter":
 		chars := utf8.RuneCountInString(text)
-		return fmt.Sprintf("[session_compact: read_chapter %d字 | 见 chapters/]", chars)
+		return fmt.Sprintf("[session_compact: read_chapter %d ký tự | xem chapters/]", chars)
 	default:
 		if len(text) > 8192 {
 			chars := utf8.RuneCountInString(text)
-			return fmt.Sprintf("[session_compact: %s %d字]", toolName, chars)
+			return fmt.Sprintf("[session_compact: %s %d ký tự]", toolName, chars)
 		}
 		return text
 	}
@@ -211,7 +216,7 @@ func compactText(role agentcore.Role, toolName, text string) string {
 func compactToolCall(tc *agentcore.ToolCall) *agentcore.ToolCall {
 	switch tc.Name {
 	case "draft_chapter":
-		return compactArgsContent(tc, "第N章正文", "drafts/")
+		return compactArgsContent(tc, "nội dung chương N", "drafts/")
 	case "save_foundation":
 		return compactFoundationArgs(tc)
 	default:
@@ -230,17 +235,17 @@ func compactArgsContent(tc *agentcore.ToolCall, label, ref string) *agentcore.To
 	}
 	var content string
 	if err := json.Unmarshal(contentRaw, &content); err != nil {
-		// content 不是字符串（可能是 JSON 对象），用字节数
-		placeholder := fmt.Sprintf("[session_compact: %s %dB | 见 %s]", label, len(contentRaw), ref)
+		// content không phải string (có thể là JSON object), dùng kích thước byte.
+		placeholder := fmt.Sprintf("[session_compact: %s %dB | xem %s]", label, len(contentRaw), ref)
 		args["content"], _ = json.Marshal(placeholder)
 	} else {
 		chars := utf8.RuneCountInString(content)
 		ch := extractJSONFieldInt(tc.Args, "chapter")
 		if ch > 0 {
-			label = fmt.Sprintf("第%d章正文", ch)
+			label = fmt.Sprintf("nội dung chương %d", ch)
 			ref = fmt.Sprintf("drafts/%02d.draft.md", ch)
 		}
-		placeholder := fmt.Sprintf("[session_compact: %s %d字 | 见 %s]", label, chars, ref)
+		placeholder := fmt.Sprintf("[session_compact: %s %d ký tự | xem %s]", label, chars, ref)
 		args["content"], _ = json.Marshal(placeholder)
 	}
 	clone := *tc

@@ -82,16 +82,41 @@ Số từ theo `working_memory.user_rules.structured.chapter_words`: **khi trư�
 
 ## Tham số commit_chapter
 
-Khi nộp, cung cấp dữ liệu thực tế có cấu trúc:
+Khi nộp, chỉ gọi `commit_chapter` bằng structured tool call. Không bọc JSON trong Markdown code fence. Không chèn giải thích văn xuôi vào arguments. Không stringify object hoặc array. Không thêm property ngoài schema (ví dụ không thêm `title`).
 
-- `summary`: Tóm tắt chương trong vòng 200 từ
-- `characters`: Tên chính thức các nhân vật xuất hiện trong chương
-- `key_events`: Các sự kiện quan trọng
-- `timeline_events`: Các sự kiện trên dòng thời gian
-- `foreshadow_updates`: Thao tác phục bút, `plant` / `advance` / `resolve`
-- `relationship_changes`: Thay đổi quan hệ nhân vật
-- `state_changes`: Thay đổi trạng thái nhân vật hoặc thực thể
+Các trường bắt buộc:
+
+- `chapter`: Số chương.
+- `summary`: Tóm tắt chương trong vòng khoảng 200 từ.
+- `characters`: Tên chính thức các nhân vật xuất hiện trong chương.
+- `key_events`: Các sự kiện quan trọng.
+
+Các trường tùy chọn:
+
+- `timeline_events`: Các sự kiện trên dòng thời gian. `timeline_events` phải là JSON array thật, không phải chuỗi. Mỗi mục: `{time, event, characters?}`.
+- `foreshadow_updates`: Thao tác phục bút, `plant` / `advance` / `resolve`. Đây phải là JSON array thật.
+- `relationship_changes`: Thay đổi quan hệ nhân vật. Đây phải là JSON array thật. Mỗi mục: `{character_a, character_b, relation}`.
+- `state_changes`: Thay đổi trạng thái nhân vật hoặc thực thể. `state_changes` phải là JSON array thật, không phải chuỗi. Mỗi mục: `{entity, field, old_value?, new_value, reason?}`.
 - `cast_intros`: Mảng giới thiệu nhân vật phụ lần đầu xuất hiện trong chương, mỗi mục `{name, brief_role}`. Xem thêm phần "Tính nhất quán nhân vật phụ" ở trên.
-- `hook_type`: `crisis` / `mystery` / `desire` / `emotion` / `choice`
-- `dominant_strand`: `quest` / `fire` / `constellation`
-- `feedback`: Gợi ý cho đề cương tiếp theo, tùy chọn
+- `hook_type`: `crisis` / `mystery` / `desire` / `emotion` / `choice`.
+- `dominant_strand`: `quest` / `fire` / `constellation`.
+- `feedback`: Gợi ý cho đề cương tiếp theo, tùy chọn. Đây phải là JSON object thật, không phải chuỗi.
+
+Ví dụ arguments hợp lệ:
+
+```json
+{
+  "chapter": 1,
+  "summary": "Lâm Tịch tỉnh lại trong bữa tiệc, nghe được tâm thanh và tung bằng chứng vạch trần Bạch Tuyết.",
+  "characters": ["Lâm Tịch", "Bạch Tuyết"],
+  "key_events": ["Lâm Tịch trọng sinh", "Cô công khai bằng chứng tại bữa tiệc"],
+  "timeline_events": [
+    {"time": "Đêm tiệc sinh nhật", "event": "Lâm Tịch tỉnh lại trong nhà vệ sinh", "characters": ["Lâm Tịch"]}
+  ],
+  "state_changes": [
+    {"entity": "Bạch Tuyết", "field": "uy tín trong nhà họ Lâm", "old_value": "được tin tuyệt đối", "new_value": "bị nghi ngờ công khai", "reason": "Lâm Tịch đưa ra sao kê, ghi âm và kết quả ADN"}
+  ],
+  "hook_type": "crisis",
+  "dominant_strand": "fire"
+}
+```

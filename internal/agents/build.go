@@ -190,7 +190,7 @@ func BuildWorkers(
 	architectThinking, _ := ResolveThinkingForModel(architectModel, roleThinking(cfg, "architect"))
 	architectShort := subagent.Config{
 		Name:               "architect_short",
-		Description:        "短篇规划师：为单卷、单冲突、高密度故事生成紧凑设定与扁平大纲",
+		Description:        "Kiến trúc sư truyện ngắn: tạo thiết lập gọn và dàn ý phẳng cho câu chuyện một tập, một xung đột, mật độ cao",
 		Model:              architectModel,
 		SystemPrompt:       bundle.Prompts.ArchitectShort,
 		Tools:              architectTools,
@@ -209,7 +209,7 @@ func BuildWorkers(
 	}
 	architectLong := subagent.Config{
 		Name:                "architect_long",
-		Description:         "长篇规划师：为连载型、可持续升级的故事生成分层设定与卷弧大纲",
+		Description:         "Kiến trúc sư truyện dài: tạo thiết lập phân tầng và dàn ý tập/cung cho câu chuyện nhiều kỳ có thể mở rộng",
 		Model:               architectModel,
 		SystemPrompt:        bundle.Prompts.ArchitectLong,
 		Tools:               architectTools,
@@ -227,13 +227,14 @@ func BuildWorkers(
 	// 唯一组装路径:协议模板 {{VOICE}} 原位回填文风段,再追加风格预设。
 	// eval 的 voice A/B 走同一函数,保证两臂等价(docs/voice-layer.md §3.2)。
 	writerPrompt := assets.BuildWriterPrompt(bundle.Prompts.Writer, bundle.Voice, bundle.Styles[cfg.Style])
+	writerModel = withCommitChapterArgNormalizer(writerModel)
 
 	restore := &ctxpack.WriterRestorePack{}
 	restore.Refresh(store)
 
 	writer := subagent.Config{
 		Name:               "writer",
-		Description:        "创作者：自主完成一章的构思、写作、自审和提交",
+		Description:        "Người viết: tự hoàn thành ý tưởng, viết, tự kiểm tra và lưu một chương",
 		Model:              writerModel,
 		SystemPrompt:       writerPrompt,
 		Tools:              writerTools,
