@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/voocel/ainovel-cli/assets"
 	"github.com/voocel/ainovel-cli/internal/bootstrap"
@@ -24,12 +26,14 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, version string) error {
 	defer cleanup()
 	defer rt.Close()
 
+	imeSync := newIMECursorSync()
 	m := NewModel(rt, bridge, version)
+	m.imeSync = imeSync
 	// Không bật báo cáo chuột toàn cục khi khởi động: trang chào mừng không cần chuột,
-	// tắt báo cáo giúp giữ nguyên tính năng kéo-chọn-sao chép gốc của terminal.
+	// tắt báo cáo giúp giữ nguyên tính năng kéo-chọn-sao-chép gốc của terminal.
 	// Khi vào bàn làm việc sáng tác (modeRunning), enterRunning sẽ bật báo cáo,
 	// để hỗ trợ nhấp chuyển panel / cuộn chuột / kéo thanh bên.
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithOutput(newIMECursorWriter(os.Stdout, imeSync)))
 	_, err = p.Run()
 	return err
 }

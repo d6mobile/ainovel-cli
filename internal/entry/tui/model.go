@@ -80,6 +80,7 @@ type Model struct {
 	streamBuf      *strings.Builder //
 	streamRounds   []string
 	textarea       textarea.Model
+	imeSync        *imeCursorSync
 	width          int
 	height         int
 	autoScroll     bool
@@ -624,30 +625,37 @@ func (m Model) View() string {
 		return "Đang tải..."
 	}
 	if m.width < 100 {
-		return lipgloss.NewStyle().
+		view := lipgloss.NewStyle().
 			Width(m.width).Height(m.height).
 			AlignHorizontal(lipgloss.Center).
 			AlignVertical(lipgloss.Center).
 			Render("Terminal quá hẹp, hãy mở rộng ít nhất đến 100 cột")
+		return m.syncIMECursorFrame(view, false, imeCursorPosition{})
 	}
 	if m.askState != nil {
-		return renderAskUserModal(m.width, m.height, m.askState)
+		view := renderAskUserModal(m.width, m.height, m.askState)
+		return m.syncIMECursorFrame(view, false, imeCursorPosition{})
 	}
 	if m.cocreate != nil {
-		return renderCoCreateModal(m.width, m.height, m.cocreate, errorText(m.err), m.textarea.View(), m.spinnerIdx, m.quitPending)
+		view := renderCoCreateModal(m.width, m.height, m.cocreate, errorText(m.err), m.textarea.View(), m.spinnerIdx, m.quitPending)
+		return m.syncIMECursorFrame(view, false, imeCursorPosition{})
 	}
 	if m.help != nil {
-		return renderHelpModal(m.width, m.height, m.help)
+		view := renderHelpModal(m.width, m.height, m.help)
+		return m.syncIMECursorFrame(view, false, imeCursorPosition{})
 	}
 	if m.report != nil {
-		return renderReportModal(m.width, m.height, m.report)
+		view := renderReportModal(m.width, m.height, m.report)
+		return m.syncIMECursorFrame(view, false, imeCursorPosition{})
 	}
 	if m.importer != nil {
 		//  Engine Trạng thái chạy， spinnerIdx（currentSpinnerFrame ）。
-		return renderImportModal(m.width, m.height, m.importer, m.spinnerIdx)
+		view := renderImportModal(m.width, m.height, m.importer, m.spinnerIdx)
+		return m.syncIMECursorFrame(view, false, imeCursorPosition{})
 	}
 	if m.simulator != nil {
-		return renderSimulationModal(m.width, m.height, m.simulator)
+		view := renderSimulationModal(m.width, m.height, m.simulator)
+		return m.syncIMECursorFrame(view, false, imeCursorPosition{})
 	}
 
 	topBar := renderTopBar(m.snapshot, m.width, m.currentSpinnerFrame(), m.version)
@@ -697,7 +705,8 @@ func (m Model) View() string {
 		commandBar := renderCommandPalette(m.width, m.compItems, m.compIdx)
 		view = overlayAboveInput(view, commandBar, inputH)
 	}
-	return view
+	inputPos, hasInput := m.imeCursorPosition()
+	return m.syncIMECursorFrame(view, hasInput, inputPos)
 }
 
 // sendCoCreate ， reqID、textarea、placeholder。
