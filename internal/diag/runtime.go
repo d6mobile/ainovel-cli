@@ -32,12 +32,13 @@ const (
 // phase/flow/章节等创作态由 Report.Stats 携带，不在此重复。
 type RuntimeCapture struct {
 	GoOS, GoArch  string
-	Models        []RoleModel  // 各会话实际生效的 provider/model（从 _meta 收集）
-	CurrentStep   string       // 最新 checkpoint：scope.step
-	StuckStep     string       // 尾部连续同 step；"" = 不卡
-	StuckCount    int          // 连续次数
-	Repeats       []RepeatStat // 重复签名 top-N（循环信号）
-	DupContent    []DupStat    // 同 sha 文本反复出现（反复生成同段）
+	Models        []RoleModel    // 各会话实际生效的 provider/model（从 _meta 收集）
+	CurrentStep   string         // 最新 checkpoint：scope.step
+	StuckStep     string         // 尾部连续同 step；"" = 不卡
+	StuckCount    int            // 连续次数
+	Repeats       []RepeatStat   // 重复签名 top-N（循环信号）
+	DupContent    []DupStat      // 同 sha 文本反复出现（反复生成同段）
+	Issues        []RuntimeIssue // 已知运行时故障签名（doctor 信号）
 	LogKinds      map[string]int
 	LogErrors     int
 	LogWarns      int
@@ -63,6 +64,22 @@ type DupStat struct {
 	Sha   string
 	Count int
 }
+
+// RuntimeIssue 是 doctor 规则识别出的具体运行时故障签名。
+type RuntimeIssue struct {
+	Kind   RuntimeIssueKind
+	Agent  string
+	Tool   string
+	Detail string
+}
+
+type RuntimeIssueKind string
+
+const (
+	RuntimeIssueCommitArgs    RuntimeIssueKind = "commit_args"
+	RuntimeIssueLengthReplay  RuntimeIssueKind = "length_replay"
+	RuntimeIssueStopGuardLoop RuntimeIssueKind = "stop_guard_loop"
+)
 
 // sessionLine 解析 sessions/*.jsonl 的一行：内嵌 agentcore.Message + 可选 _meta。
 type sessionLine struct {
@@ -187,6 +204,7 @@ func scanSession(path, agent string, rc *RuntimeCapture, models map[string]RoleM
 		if json.Unmarshal(sc.Bytes(), &sl) != nil {
 			continue
 		}
+		captureRuntimeIssueFromMessage(agent, sl.Message, rc)
 		ev := redactMessage(agent, sl.Message)
 		evs = append(evs, ev)
 		rc.RedactedTexts += ev.Redacted
@@ -195,6 +213,27 @@ func scanSession(path, agent string, rc *RuntimeCapture, models map[string]RoleM
 		}
 	}
 	return evs
+}
+
+func captureRuntimeIssueFromMessage(agent string, m agentcore.Message, rc *RuntimeCapture) {
+	toolName, _ := m.Metadata["tool_name"].(string)
+	isErr, _ := m.Metadata["is_error"].(bool)
+	if m.Role != agentcore.RoleTool || !isErr {
+		return
+	}
+	text := m.TextContent()
+	if toolName == "commit_chapter" && (strings.Contains(text, "InputValidationError") || strings.Contains(text, "tool args invalid")) {
+		appendRuntimeIssue(rc, RuntimeIssue{Kind: RuntimeIssueCommitArgs, Agent: agent, Tool: toolName, Detail: firstLine(text, 180)})
+	}
+}
+
+func appendRuntimeIssue(rc *RuntimeCapture, issue RuntimeIssue) {
+	for _, existing := range rc.Issues {
+		if existing.Kind == issue.Kind && existing.Agent == issue.Agent && existing.Tool == issue.Tool && existing.Detail == issue.Detail {
+			return
+		}
+	}
+	rc.Issues = append(rc.Issues, issue)
 }
 
 // aggregateRepeats 在给定事件窗口上累计重复签名与同段文本。
@@ -250,10 +289,35 @@ func captureLog(dir string, rc *RuntimeCapture) {
 		if m := kindRe.FindStringSubmatch(line); m != nil {
 			rc.LogKinds[m[1]]++
 		}
-		if strings.Contains(line, "stop_guard") {
+		if strings.Contains(line, "invalid message content type") {
+			appendRuntimeIssue(rc, RuntimeIssue{Kind: RuntimeIssueLengthReplay, Agent: extractLogAgent(line), Detail: "invalid message content type after provider replay"})
+		}
+		if strings.Contains(line, "stop_guard") || strings.Contains(line, "StopGuard:") {
 			rc.StopGuard++
+			appendRuntimeIssue(rc, RuntimeIssue{Kind: RuntimeIssueStopGuardLoop, Agent: extractLogAgent(line), Detail: "StopGuard blocked end_turn before required artifact"})
 		}
 	}
+}
+
+func extractLogAgent(line string) string {
+	for _, marker := range []string{" agent=", " agent=\""} {
+		idx := strings.Index(line, marker)
+		if idx < 0 {
+			continue
+		}
+		start := idx + len(marker)
+		if strings.HasSuffix(marker, "\"") {
+			if end := strings.IndexByte(line[start:], '"'); end >= 0 {
+				return line[start : start+end]
+			}
+		}
+		end := start
+		for end < len(line) && line[end] != ' ' {
+			end++
+		}
+		return strings.Trim(line[start:end], "\"")
+	}
+	return "runtime"
 }
 
 // readTail 读文件尾部 logTailCap 字节，并丢弃首个可能被截断的半行。

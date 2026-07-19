@@ -11,7 +11,12 @@ import (
 	"github.com/voocel/agentcore/llm"
 )
 
-var commitArrayFields = map[string]bool{
+var commitStringArrayFields = map[string]bool{
+	"characters": true,
+	"key_events": true,
+}
+
+var commitOptionalObjectArrayFields = map[string]bool{
 	"timeline_events":      true,
 	"foreshadow_updates":   true,
 	"relationship_changes": true,
@@ -138,7 +143,7 @@ func normalizeCommitChapterArgs(raw json.RawMessage) (json.RawMessage, bool, err
 			changed = true
 		}
 	}
-	for field := range commitArrayFields {
+	for field := range commitStringArrayFields {
 		v, ok := obj[field]
 		if !ok {
 			continue
@@ -147,18 +152,27 @@ func normalizeCommitChapterArgs(raw json.RawMessage) (json.RawMessage, bool, err
 		if !ok {
 			continue
 		}
-		parsed, err := parseJSONStringValue(s)
+		arr, err := parseStringArrayField(field, s)
 		if err != nil {
-			return nil, false, fmt.Errorf("%s: parse JSON string: %w", field, err)
+			return nil, false, err
 		}
-		arr, ok := parsed.([]any)
+		obj[field] = arr
+		changed = true
+	}
+	for field := range commitOptionalObjectArrayFields {
+		v, ok := obj[field]
 		if !ok {
-			return nil, false, fmt.Errorf("%s: expected JSON array inside string, got %T", field, parsed)
+			continue
 		}
-		for i, item := range arr {
-			if _, ok := item.(map[string]any); !ok {
-				return nil, false, fmt.Errorf("%s[%d]: expected object, got %T", field, i, item)
-			}
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+		arr, ok := parseOptionalObjectArrayField(s)
+		if !ok {
+			delete(obj, field)
+			changed = true
+			continue
 		}
 		obj[field] = arr
 		changed = true
@@ -236,6 +250,40 @@ func parseJSONStringValue(s string) (any, error) {
 		return nil, err
 	}
 	return parsed, nil
+}
+
+func parseStringArrayField(field, s string) ([]any, error) {
+	parsed, err := parseJSONStringValue(s)
+	if err != nil {
+		return nil, fmt.Errorf("%s: parse JSON string: %w", field, err)
+	}
+	arr, ok := parsed.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%s: expected JSON array inside string, got %T", field, parsed)
+	}
+	for i, item := range arr {
+		if _, ok := item.(string); !ok {
+			return nil, fmt.Errorf("%s[%d]: expected string, got %T", field, i, item)
+		}
+	}
+	return arr, nil
+}
+
+func parseOptionalObjectArrayField(s string) ([]any, bool) {
+	parsed, err := parseJSONStringValue(s)
+	if err != nil {
+		return nil, false
+	}
+	arr, ok := parsed.([]any)
+	if !ok {
+		return nil, false
+	}
+	for _, item := range arr {
+		if _, ok := item.(map[string]any); !ok {
+			return nil, false
+		}
+	}
+	return arr, true
 }
 
 func normalizeRelationshipChangeKeys(obj map[string]any) bool {

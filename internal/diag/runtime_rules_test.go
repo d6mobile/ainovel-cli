@@ -56,3 +56,32 @@ func TestRuntimeFindings_Quiet(t *testing.T) {
 		t.Errorf("安静态不应产 Finding，got %d: %+v", len(fs), fs)
 	}
 }
+
+func TestRuntimeFindings_DoctorIssues(t *testing.T) {
+	rc := RuntimeCapture{
+		LogKinds: map[string]int{},
+		Issues: []RuntimeIssue{
+			{Kind: RuntimeIssueCommitArgs, Agent: "writer-ch04", Tool: "commit_chapter", Detail: "key_events stringified; state_changes malformed"},
+			{Kind: RuntimeIssueLengthReplay, Agent: "writer-ch01", Detail: "invalid message content type after stop_reason=length"},
+			{Kind: RuntimeIssueStopGuardLoop, Agent: "writer", Detail: "StopGuard blocked writer end_turn repeatedly"},
+		},
+	}
+	fs := runtimeFindings(&rc)
+	sev := map[string]Severity{}
+	for _, f := range fs {
+		sev[f.Rule] = f.Severity
+		if f.AutoLevel != AutoNone {
+			t.Errorf("%s should be observer-only, got %s", f.Rule, f.AutoLevel)
+		}
+	}
+	want := map[string]Severity{
+		"CommitArgsValidationFailure": SevWarning,
+		"LengthStopReplayFailure":     SevCritical,
+		"StopGuardLoop":               SevWarning,
+	}
+	for rule, severity := range want {
+		if sev[rule] != severity {
+			t.Errorf("%s: got %q want %q", rule, sev[rule], severity)
+		}
+	}
+}

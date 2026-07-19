@@ -123,15 +123,15 @@ func (ms *ModelSet) ForRoleWithFailover(role string, report FailoverReporter) ag
 	defer ms.mu.RUnlock()
 	primary, ok := ms.models[role]
 	if !ok {
-		return ms.Default
+		return withProviderReplaySanitizer(ms.Default)
 	}
 	targets := ms.fallbacks[role]
 	if len(targets) == 0 {
-		return primary
+		return withProviderReplaySanitizer(primary)
 	}
-	return &failoverModel{
+	return withProviderReplaySanitizer(&failoverModel{
 		role: role, primary: primary, set: ms, report: report,
-	}
+	})
 }
 
 // Summary Mô hìnhTóm tắt（）。
@@ -366,11 +366,80 @@ func createModelFromConfig(providerKey, model string, pc ProviderConfig, cache m
 	return m, nil
 }
 
+type replaySanitizingModel struct {
+	inner agentcore.ChatModel
+}
+
+type capabilityReplaySanitizingModel struct {
+	*replaySanitizingModel
+	capabilities llm.CapabilityProvider
+}
+
+func withProviderReplaySanitizer(model agentcore.ChatModel) agentcore.ChatModel {
+	if model == nil {
+		return nil
+	}
+	wrapped := &replaySanitizingModel{inner: model}
+	if capabilities, ok := model.(llm.CapabilityProvider); ok {
+		return &capabilityReplaySanitizingModel{replaySanitizingModel: wrapped, capabilities: capabilities}
+	}
+	return wrapped
+}
+
+func (m *capabilityReplaySanitizingModel) Capabilities() llm.Capabilities {
+	return m.capabilities.Capabilities()
+}
+
+func (m *replaySanitizingModel) SupportsTools() bool { return m.inner.SupportsTools() }
+
+func (m *replaySanitizingModel) Info() llm.ModelInfo {
+	if info, ok := m.inner.(interface{ Info() llm.ModelInfo }); ok {
+		return info.Info()
+	}
+	return llm.ModelInfo{}
+}
+
+func (m *replaySanitizingModel) ProviderName() string {
+	if provider, ok := m.inner.(interface{ ProviderName() string }); ok {
+		return provider.ProviderName()
+	}
+	return m.Info().Provider
+}
+
+func (m *replaySanitizingModel) Generate(ctx context.Context, messages []agentcore.Message, tools []agentcore.ToolSpec, opts ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
+	return m.inner.Generate(ctx, sanitizeProviderReplayMessages(messages), tools, opts...)
+}
+
+func (m *replaySanitizingModel) GenerateStream(ctx context.Context, messages []agentcore.Message, tools []agentcore.ToolSpec, opts ...agentcore.CallOption) (<-chan agentcore.StreamEvent, error) {
+	return m.inner.GenerateStream(ctx, sanitizeProviderReplayMessages(messages), tools, opts...)
+}
+
 type failoverModel struct {
 	role    string
 	primary *SwappableModel
 	set     *ModelSet
 	report  FailoverReporter
+}
+
+func sanitizeProviderReplayMessages(messages []agentcore.Message) []agentcore.Message {
+	if len(messages) == 0 {
+		return messages
+	}
+	filtered := messages[:0]
+	changed := false
+	for _, msg := range messages {
+		if msg.Role == agentcore.RoleAssistant && msg.StopReason == agentcore.StopReasonLength {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+	if !changed {
+		return messages
+	}
+	out := make([]agentcore.Message, len(filtered))
+	copy(out, filtered)
+	return out
 }
 
 func (m *failoverModel) Generate(ctx context.Context, messages []agentcore.Message, tools []agentcore.ToolSpec, opts ...agentcore.CallOption) (*agentcore.LLMResponse, error) {

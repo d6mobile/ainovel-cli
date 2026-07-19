@@ -58,10 +58,34 @@ func TestNormalizeCommitChapterArgsExtractsFencedJSON(t *testing.T) {
 	}
 }
 
-func TestNormalizeCommitChapterArgsRejectsStringifiedObjectForArray(t *testing.T) {
-	raw := json.RawMessage(`{"chapter":1,"summary":"s","characters":["A"],"key_events":["e"],"state_changes":"{\"entity\":\"A\"}"}`)
+func TestNormalizeCommitChapterArgsRejectsStringifiedObjectForRequiredArray(t *testing.T) {
+	raw := json.RawMessage(`{"chapter":1,"summary":"s","characters":"{\"name\":\"A\"}","key_events":["e"]}`)
 	if _, _, err := normalizeCommitChapterArgs(raw); err == nil {
-		t.Fatal("expected error for object where array is required")
+		t.Fatal("expected error for object where required array is required")
+	}
+}
+
+func TestNormalizeCommitChapterArgsParsesRequiredStringifiedArraysAndDropsMalformedOptionalArrays(t *testing.T) {
+	raw := json.RawMessage(`{"chapter":4,"summary":"s","characters":"[\"Lâm Tịch\",\"Hàn Dục\"]","key_events":"[\"Mẹ qua đời\",\"Lâm Tịch rời đi Paris\"]","state_changes":"[{\"entity\":\"Tịch Trà Quán\",\"field\": tình trạng kinh doanh}]"}`)
+	got, changed, err := normalizeCommitChapterArgs(raw)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected changed=true")
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(got, &obj); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := obj["characters"].([]any); !ok {
+		t.Fatalf("characters = %T, want []any", obj["characters"])
+	}
+	if _, ok := obj["key_events"].([]any); !ok {
+		t.Fatalf("key_events = %T, want []any", obj["key_events"])
+	}
+	if _, ok := obj["state_changes"]; ok {
+		t.Fatal("malformed optional state_changes should be dropped")
 	}
 }
 

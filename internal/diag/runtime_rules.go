@@ -21,6 +21,7 @@ const (
 type RuntimeRuleFunc func(rc *RuntimeCapture) []Finding
 
 var runtimeRules = []RuntimeRuleFunc{
+	doctorIssues,
 	repeatedErrors,
 	stuckStep,
 	streamIdleStorm,
@@ -46,6 +47,53 @@ func Diagnose(s *store.Store) (Report, RuntimeCapture) {
 	rep.Findings = append(rep.Findings, runtimeFindings(&rc)...)
 	sortFindings(rep.Findings)
 	return rep, rc
+}
+
+func doctorIssues(rc *RuntimeCapture) []Finding {
+	var out []Finding
+	for _, issue := range rc.Issues {
+		finding := Finding{
+			Category:   CatFlow,
+			Severity:   SevWarning,
+			Confidence: ConfHigh,
+			AutoLevel:  AutoNone,
+			Target:     "runtime.doctor",
+			Evidence:   runtimeIssueEvidence(issue),
+		}
+		switch issue.Kind {
+		case RuntimeIssueCommitArgs:
+			finding.Rule = "CommitArgsValidationFailure"
+			finding.Title = "commit_chapter bị lỗi xác thực tham số"
+			finding.Suggestion = "Model đã sinh tham số commit_chapter sai schema. Kiểm tra session args gần nhất; nếu là array bị stringify hoặc optional array hỏng, thêm normalizer/test hồi quy. Nếu thiếu summary/characters/key_events, cần inject hướng dẫn retry rõ ràng trước khi gọi lại."
+		case RuntimeIssueLengthReplay:
+			finding.Rule = "LengthStopReplayFailure"
+			finding.Severity = SevCritical
+			finding.Title = "Replay sau stop_reason=length làm provider lỗi"
+			finding.Suggestion = "Assistant message bị cắt do giới hạn output không được replay nguyên trạng vào provider. Bật/kiểm tra replay sanitizer để bỏ message stop_reason=length trước lần gọi tiếp theo."
+		case RuntimeIssueStopGuardLoop:
+			finding.Rule = "StopGuardLoop"
+			finding.Title = "StopGuard phải chặn agent kết thúc sớm"
+			finding.Suggestion = "Agent định end_turn trước khi có sản phẩm bắt buộc. Kiểm tra prompt protocol và các lỗi ngay trước đó; thường là model vừa gặp lỗi tool args hoặc bị cắt output nên mất bước tiếp theo."
+		default:
+			continue
+		}
+		out = append(out, finding)
+	}
+	return out
+}
+
+func runtimeIssueEvidence(issue RuntimeIssue) string {
+	parts := []string{fmt.Sprintf("kind=%s", issue.Kind)}
+	if issue.Agent != "" {
+		parts = append(parts, "agent=`"+issue.Agent+"`")
+	}
+	if issue.Tool != "" {
+		parts = append(parts, "tool=`"+issue.Tool+"`")
+	}
+	if issue.Detail != "" {
+		parts = append(parts, "detail=`"+issue.Detail+"`")
+	}
+	return strings.Join(parts, "; ")
 }
 
 // repeatedErrors chỉ đánh dấu "lỗi / tham số không hợp lệ xuất hiện lặp lại gần cuối" thành Finding.
