@@ -26,3 +26,5 @@
 
 ## Localization
 - When pulling or adding user-facing text, translate to Vietnamese unless the text is code, API names, or protocol details that must remain unchanged.
+- Keep logic, function names, variable names, command names, protocol names, field names, and other code identifiers in English.
+- Localize only UI strings, prompts, help text, docs, and user-facing notifications.
