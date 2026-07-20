@@ -254,7 +254,7 @@ func TestGeneralSettingsLandingShowsStyleBudgetNotify(t *testing.T) {
 		generalStyle: "default",
 	}
 	view := renderModelConfigModal(120, state)
-	for _, want := range []string{"Style", "Budget", "Notify"} {
+	for _, want := range []string{"Phong cách", "Ngân sách", "Thông báo"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("general settings modal missing %q: %s", want, view)
 		}

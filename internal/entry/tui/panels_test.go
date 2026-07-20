@@ -34,7 +34,7 @@ func TestRenderStatusBar(t *testing.T) {
 		BudgetLimitUSD:     5,
 		TotalSavedUSD:      0.12,
 	}, "/tmp/output", 120))
-	for _, want := range []string{"test-model(200K,med)", "↑1.2M", "↓89.3k", "$0.31/$5.00", "tiết kiệm $0.12", "./output"} {
+	for _, want := range []string{"test-model(200K,trung bình)", "↑1.2M", "↓89.3k", "$0.31/$5.00", "tiết kiệm $0.12", "./output"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("status bar thiếu %q: %q", want, out)
 		}
@@ -46,11 +46,11 @@ func TestRenderStatusBarAutoThinkingAndEmpty(t *testing.T) {
 		ModelName:          "test-model",
 		ModelContextWindow: 128000,
 	}, "", 120))
-	if !strings.Contains(out, "test-model(128K,auto)") {
+	if !strings.Contains(out, "test-model(128K,tự động)") {
 		t.Fatalf("thiếu chú thích auto cho mức thinking: %q", out)
 	}
-	if out := ansi.Strip(renderStatusBar(host.UISnapshot{}, "", 120)); out != "READY" {
-		t.Fatalf("snapshot rỗng phải fallback READY, got %q", out)
+	if out := ansi.Strip(renderStatusBar(host.UISnapshot{}, "", 120)); out != "Sẵn sàng" {
+		t.Fatalf("snapshot rỗng phải fallback Sẵn sàng, got %q", out)
 	}
 }
 
