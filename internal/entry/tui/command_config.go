@@ -516,12 +516,12 @@ func (m Model) handleModelConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if handleConfigInput(&state.input, msg) && msg.Type == tea.KeyEnter {
 			name := strings.TrimSpace(state.input)
 			if name == "" {
-				state.message = "Tên Provider không được để trống"
+				state.message = "Tên nhà cung cấp không được để trống"
 				break
 			}
 			for _, provider := range state.snapshot.Providers {
 				if provider.Name == name {
-					state.message = "Provider đã tồn tại; hãy quay lại và chọn chỉnh sửa"
+					state.message = "Nhà cung cấp đã tồn tại; hãy quay lại và chọn chỉnh sửa"
 					return m, nil
 				}
 			}
@@ -566,7 +566,7 @@ func (m Model) handleModelConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if msg.Type == tea.KeyEnter {
 			state.apiKeyAction = configKeyActions[state.cursor].action
 			if state.apiKeyAction == host.APIKeyClear && !state.apiKeyOptional {
-				state.message = "Provider này bắt buộc có API Key, không thể xóa"
+				state.message = "Nhà cung cấp này bắt buộc có API Key, không thể xóa"
 				return m, nil
 			}
 			if state.apiKeyAction == host.APIKeyReplace {
@@ -581,7 +581,7 @@ func (m Model) handleModelConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if handleConfigInput(&state.input, msg) && msg.Type == tea.KeyEnter {
 			state.apiKey = strings.TrimSpace(state.input)
 			if state.apiKey == "" && !state.apiKeyOptional {
-				state.message = "Provider này bắt buộc có API Key"
+				state.message = "Nhà cung cấp này bắt buộc có API Key"
 				return m, nil
 			}
 			// Đầu vào；（）。
@@ -953,7 +953,7 @@ func renderModelConfigModal(width int, state *modelConfigState) string {
 		hint = "↑↓ Chọn · Enter Chỉnh/Bật tắt · Esc Quay lại"
 	case configStepGeneralNotifyCommand:
 		lines = append(lines, configHeading("Lệnh thông báo"))
-		lines = append(lines, lipgloss.NewStyle().Foreground(colorDim).Render("Để trống = dùng notifier mặc định của hệ điều hành"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(colorDim).Render("Để trống = dùng trình thông báo mặc định của hệ điều hành"))
 		lines = append(lines, renderConfigInput(state.input, false, contentW))
 		hint = configInputHint
 	case configStepGeneralNotifyEvents:

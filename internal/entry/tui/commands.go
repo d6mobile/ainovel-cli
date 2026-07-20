@@ -91,7 +91,7 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "config",
 			Group:       "system",
 			Usage:       "/config",
-			Description: "Thêm hoặc chỉnh sửa Provider, mô hình và cửa sổ ngữ cảnh",
+			Description: "Thêm hoặc chỉnh sửa nhà cung cấp, mô hình và cửa sổ ngữ cảnh",
 			AutoExecute: true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				if len(args) != 0 {
