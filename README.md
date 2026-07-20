@@ -100,7 +100,7 @@ Công cụ CLI sáng tác tiểu thuyết dài kỳ hoàn toàn tự động b�
 ```bash
 git clone https://github.com/<your-username>/ainovel-cli.git
 cd ainovel-cli
-mkdir config workspace
+mkdir config trong-sinh-roi-toi-dung-tam-thanh-lat-tung-hao-mon
 ```
 
 **Bước 2** — Build Docker image:
@@ -119,24 +119,24 @@ docker build -t ainovel-cli-vi .
 # Linux / macOS
 docker run --rm -it \
   -v "$PWD/config:/root/.ainovel" \
-  -v "$PWD/workspace:/workspace" \
+  -v "$PWD/trong-sinh-roi-toi-dung-tam-thanh-lat-tung-hao-mon:/workspace" \
   -e TERM=xterm-256color \
   ainovel-cli-vi
 
 # Windows (PowerShell)
 docker run --rm -it `
   -v "${PWD}\config:/root/.ainovel" `
-  -v "${PWD}\workspace:/workspace" `
+  -v "${PWD}\trong-sinh-roi-toi-dung-tam-thanh-lat-tung-hao-mon:/workspace" `
   -e TERM=xterm-256color `
   ainovel-cli-vi
 
 # Windows (Command Prompt)
-docker run --rm -it -v "%CD%\config:/root/.ainovel" -v "%CD%\workspace:/workspace" -e TERM=xterm-256color ainovel-cli-vi
+docker run --rm -it -v "%CD%\config:/root/.ainovel" -v "%CD%\trong-sinh-roi-toi-dung-tam-thanh-lat-tung-hao-mon:/workspace" -e TERM=xterm-256color ainovel-cli-vi
 ```
 
 > **Windows Terminal**: Mở tab mới tự động —
 > ```powershell
-> Start-Process "wt.exe" -ArgumentList "new-tab", "cmd", "/k", 'docker run --rm -it -v "%CD%\config:/root/.ainovel" -v "%CD%\workspace:/workspace" -e TERM=xterm-256color ainovel-cli-vi'
+> Start-Process "wt.exe" -ArgumentList "new-tab", "cmd", "/k", 'docker run --rm -it -v "%CD%\config:/root/.ainovel" -v "%CD%\trong-sinh-roi-toi-dung-tam-thanh-lat-tung-hao-mon:/workspace" -e TERM=xterm-256color ainovel-cli-vi'
 > ```
 
 **Chế độ không giao diện** (headless, chạy trên server):
@@ -144,7 +144,7 @@ docker run --rm -it -v "%CD%\config:/root/.ainovel" -v "%CD%\workspace:/workspac
 ```bash
 docker run --rm \
   -v "$PWD/config:/root/.ainovel" \
-  -v "$PWD/workspace:/workspace" \
+  -v "$PWD/trong-sinh-roi-toi-dung-tam-thanh-lat-tung-hao-mon:/workspace" \
   ainovel-cli-vi \
   --headless --prompt "Viết tiểu thuyết cung đấu, nhân vật chính là cô lao công xuất thân thấp kém"
 ```
@@ -430,12 +430,12 @@ fatigue_words:
 
 Crash, mất mạng, tắt máy — **không mất tiến độ**. Chỉ cần chạy lại app trong cùng thư mục, hệ thống tự khôi phục từ điểm cuối cùng đã lưu.
 
-> Muốn bắt đầu tiểu thuyết mới: xóa thư mục `workspace/output/` (hoặc di chuyển sang thư mục khác).
+> Muốn bắt đầu tiểu thuyết mới: tạo một thư mục workspace mới theo tên truyện, hoặc xóa/di chuyển thư mục `<ten-truyen-slug>/output/` của truyện cũ.
 
-**Quản lý nhiều tiểu thuyết**: Mỗi tiểu thuyết gắn với một thư mục workspace riêng. Dùng volume Docker khác nhau cho từng cuốn:
+**Quản lý nhiều tiểu thuyết**: Mỗi tiểu thuyết gắn với một thư mục workspace riêng, nên đặt theo tên truyện dạng slug để dễ tìm. Dùng volume Docker khác nhau cho từng cuốn:
 ```bash
--v "$PWD/workspace-truyen-1:/workspace"   # Tiểu thuyết 1
--v "$PWD/workspace-truyen-2:/workspace"   # Tiểu thuyết 2
+-v "$PWD/trong-sinh-roi-toi-dung-tam-thanh-lat-tung-hao-mon:/workspace"   # Truyện hiện tại
+-v "$PWD/ten-truyen-moi:/workspace"                                       # Truyện mới
 ```
 
 ---
@@ -443,7 +443,7 @@ Crash, mất mạng, tắt máy — **không mất tiến độ**. Chỉ cần c
 ## Cấu trúc thư mục output
 
 ```
-workspace/output/novel/
+<ten-truyen-slug>/output/novel/
 ├── chapters/              # Bản thảo cuối (Markdown)
 │   ├── 01.md
 │   └── ...
@@ -468,7 +468,7 @@ workspace/output/novel/
 
 ```bash
 # Trong TUI, gõ:
-/export                          # TXT, lưu vào workspace/output/novel/TenTruyen.txt
+/export                          # TXT, lưu vào <ten-truyen-slug>/output/novel/TenTruyen.txt
 /export ~/truyen-cua-toi.epub    # EPUB (đọc trên Kindle, Apple Books, v.v.)
 /export from=10 to=50            # Xuất chương 10–50
 /export from=10 --overwrite      # Ghi đè file cũ
@@ -489,10 +489,10 @@ workspace/output/novel/
 **Giải pháp**: Xóa workspace cũ và khởi động lại:
 ```bash
 # Linux/macOS
-rm -rf workspace/output/
+rm -rf <ten-truyen-slug>/output/
 
 # Windows PowerShell
-Remove-Item -Recurse -Force workspace\output\
+Remove-Item -Recurse -Force <ten-truyen-slug>\output\
 ```
 
 ---

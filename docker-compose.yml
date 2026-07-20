@@ -5,6 +5,6 @@ services:
       context: .
     volumes:
       - ./config:/root/.ainovel
-      - ./workspace:/workspace
+      - ./trong-sinh-roi-toi-dung-tam-thanh-lat-tung-hao-mon:/workspace
     stdin_open: true
     tty: true
