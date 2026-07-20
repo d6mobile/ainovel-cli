@@ -24,7 +24,7 @@ func Run(ctx context.Context, deps Deps, opts Options) (*Result, error) {
 		return nil, err
 	}
 	if deps.Store == nil {
-		return nil, fmt.Errorf("exp: deps.Store is nil")
+		return nil, fmt.Errorf("exp: deps.Store là nil")
 	}
 
 	if opts.Format == "" {

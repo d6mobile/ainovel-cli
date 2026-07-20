@@ -10,6 +10,16 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
+func TestSaveReviewDescriptionLocalized(t *testing.T) {
+	tool := NewSaveReviewTool(store.NewStore(t.TempDir()))
+	desc := tool.Description()
+	for _, want := range []string{"Lưu kết quả đánh giá", "Kết quả trả về"} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("description should contain %q, got %q", want, desc)
+		}
+	}
+}
+
 func TestSaveReviewPersistsContractAssessment(t *testing.T) {
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -86,7 +96,7 @@ func TestSaveReviewRejectsMissingDimensions(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "dimensions must contain exactly") {
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "dimensions phải chứa đúng 7 mục") {
 		t.Fatalf("expected dimensions validation error, got %v", err)
 	}
 }
@@ -124,7 +134,7 @@ func TestSaveReviewRejectsDimensionWithoutComment(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "dimension comment is required: pacing") {
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "bình luận cho chiều là bắt buộc: pacing") {
 		t.Fatalf("expected dimension comment validation error, got %v", err)
 	}
 }
@@ -168,7 +178,7 @@ func TestSaveReviewRejectsUnfinishedAffectedChapter(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "pending_rewrites 只能包含已完成章节") {
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "pending_rewrites chỉ được chứa các chương đã hoàn thành") {
 		t.Fatalf("expected unfinished affected chapter rejection, got %v", err)
 	}
 	review, err := s.World.LoadReview(58)
@@ -267,7 +277,7 @@ func TestSaveReviewRejectsMissingAffectedChaptersForRewrite(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "affected_chapters is required") {
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "affected_chapters là bắt buộc") {
 		t.Fatalf("expected affected_chapters validation error, got %v", err)
 	}
 }
@@ -302,15 +312,11 @@ func TestSaveReviewRejectsIssueWithoutEvidence(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "issue evidence is required") {
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "bằng chứng vấn đề là bắt buộc") {
 		t.Fatalf("expected issue evidence validation error, got %v", err)
 	}
 }
 
-// TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition 防回归：返工排空中途
-// （Flow=rewriting、PendingRewrites=[8,9]）对已重写章复审得到 polish 时，
-// SetFlow(polishing) 与 rewriting 构成非法迁移。修复前先写队列再切 Flow，会把
-// 队列脏写成 [8] 丢失第 9 章；修复后 SetFlow 先行，非法迁移时队列保持不变。
 func TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition(t *testing.T) {
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -356,15 +362,15 @@ func TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "set flow") {
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "đặt flow") {
 		t.Fatalf("expected illegal flow transition error, got %v", err)
 	}
 
 	p, _ := s.Progress.Load()
 	if len(p.PendingRewrites) != 2 || p.PendingRewrites[0] != 8 || p.PendingRewrites[1] != 9 {
-		t.Fatalf("PendingRewrites 不应被脏写，期望 [8 9]，got %v", p.PendingRewrites)
+		t.Fatalf("PendingRewrites không được bị ghi bẩn, mong đợi [8 9], got %v", p.PendingRewrites)
 	}
 	if p.Flow != domain.FlowRewriting {
-		t.Fatalf("Flow 应保持 rewriting，got %s", p.Flow)
+		t.Fatalf("Flow phải giữ rewriting, got %s", p.Flow)
 	}
 }

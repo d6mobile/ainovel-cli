@@ -1,8 +1,3 @@
-// Package notify 提供无人值守告警通道。
-//
-// 合宪定位（architecture.md §2.3）：纯观察层动作——告警永不介入控制流
-// （不重试、不改派、不停机），只是把 TUI 内已有的事件"喊"到屏幕之外。
-// Send 异步执行、永不阻塞 Host、失败只记 slog。
 package notify
 
 import (
@@ -17,9 +12,8 @@ import (
 	"time"
 )
 
-// Notification 一条告警的全部事实。
 type Notification struct {
-	Kind  string `json:"kind"`  // Kinds 返回的稳定事件名
+	Kind  string `json:"kind"`
 	Level string `json:"level"` // info / warn / error
 	Title string `json:"title"`
 	Body  string `json:"body"`
@@ -35,8 +29,6 @@ const (
 	KindWorkerFailure = "worker_failure"
 )
 
-// Kinds 返回当前版本可用于 notify.events 的全部事件名。
-// 这里是通知事件契约的唯一事实源。
 func Kinds() []string {
 	return []string{
 		KindRunEnd,
@@ -58,15 +50,12 @@ func IsKnownKind(kind string) bool {
 	return false
 }
 
-// Notifier 按配置分发通知。零值不可用，必须经 New 创建；nil 安全（Send noop）。
 type Notifier struct {
-	command string          // 非空时替代 system 通道（手机推送走这里）
-	events  map[string]bool // nil = 全部 kind 放行
+	command string
+	events  map[string]bool
 	timeout time.Duration
 }
 
-// New 创建 Notifier。command 为空走内置 system 通道（Windows 通知气泡 /
-// macOS osascript / Linux notify-send）；events 非空时只放行列出的 kind。
 func New(command string, events []string) *Notifier {
 	n := &Notifier{command: strings.TrimSpace(command), timeout: 10 * time.Second}
 	if len(events) > 0 {
@@ -78,7 +67,6 @@ func New(command string, events []string) *Notifier {
 	return n
 }
 
-// Send 异步发送一条通知。过滤、执行、失败处理全部不影响调用方。
 func (n *Notifier) Send(nt Notification) {
 	if !n.allows(nt.Kind) {
 		return
@@ -86,7 +74,6 @@ func (n *Notifier) Send(nt Notification) {
 	go n.deliver(nt)
 }
 
-// allows 返回该 kind 是否放行（nil Notifier / 未列入 events 时拦截）。
 func (n *Notifier) allows(kind string) bool {
 	if n == nil {
 		return false
@@ -94,7 +81,6 @@ func (n *Notifier) allows(kind string) bool {
 	return n.events == nil || n.events[kind]
 }
 
-// deliver 同步执行一次发送（goroutine 内运行；测试可直接调用以同步断言）。
 func (n *Notifier) deliver(nt Notification) {
 	ctx, cancel := context.WithTimeout(context.Background(), n.timeout)
 	defer cancel()
@@ -106,12 +92,10 @@ func (n *Notifier) deliver(nt Notification) {
 		err = runSystem(ctx, nt)
 	}
 	if err != nil {
-		slog.Warn("通知发送失败", "module", "notify", "kind", nt.Kind, "err", err)
+		slog.Warn("Gửi thông báo thất bại", "module", "notify", "kind", nt.Kind, "err", err)
 	}
 }
 
-// runCommand 执行用户配置的命令：字段经环境变量传入（一行 curl 零依赖、无注入
-// 风险），完整 JSON 同时写 stdin（复杂分发场景自行解析）。超时由 ctx 强杀。
 func runCommand(ctx context.Context, command string, nt Notification) error {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -138,7 +122,6 @@ func notificationEnv(nt Notification) []string {
 	)
 }
 
-// runSystem 内置桌面通知：只覆盖"人在电脑旁"的场景，找不到命令静默降级。
 func runSystem(ctx context.Context, nt Notification) error {
 	switch runtime.GOOS {
 	case "windows":
@@ -148,19 +131,16 @@ func runSystem(ctx context.Context, nt Notification) error {
 		return exec.CommandContext(ctx, "osascript", "-e", script).Run()
 	case "linux":
 		if _, err := exec.LookPath("notify-send"); err != nil {
-			slog.Info("通知降级为日志（无 notify-send）", "module", "notify", "title", nt.Title, "body", nt.Body)
+			slog.Info("Thông báo chuyển sang nhật ký (không có notify-send)", "module", "notify", "title", nt.Title, "body", nt.Body)
 			return nil
 		}
 		return exec.CommandContext(ctx, "notify-send", nt.Title, nt.Body).Run()
 	default:
-		slog.Info("通知降级为日志（平台无 system 通道）", "module", "notify", "title", nt.Title, "body", nt.Body)
+		slog.Info("Thông báo chuyển sang nhật ký (nền tảng không có kênh hệ thống)", "module", "notify", "title", nt.Title, "body", nt.Body)
 		return nil
 	}
 }
 
-// runWindowsNotification 使用系统自带 PowerShell + WinForms NotifyIcon。
-// Windows 10/11 会把气泡显示在右上角并纳入系统通知体验；无需安装模块、注册应用
-// 或携带额外二进制。调用方本就异步执行，短暂保活只用于让系统接收气泡消息。
 func runWindowsNotification(ctx context.Context, nt Notification) error {
 	powershell, err := findPowerShell()
 	if err != nil {
@@ -178,7 +158,7 @@ func findPowerShell() (string, error) {
 			return path, nil
 		}
 	}
-	return "", fmt.Errorf("Windows 通知需要 PowerShell，但系统未找到 powershell.exe 或 pwsh.exe")
+	return "", fmt.Errorf("Thông báo Windows cần PowerShell, nhưng hệ thống không tìm thấy powershell.exe hoặc pwsh.exe")
 }
 
 const windowsNotificationScript = `$ErrorActionPreference = 'Stop'
@@ -198,7 +178,6 @@ $notify.ShowBalloonTip(4000)
 Start-Sleep -Milliseconds 4500
 $notify.Dispose()`
 
-// appleScriptString 把任意文本包装为 AppleScript 字符串字面量。
 func appleScriptString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)

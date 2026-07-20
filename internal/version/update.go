@@ -44,10 +44,10 @@ func Update(ctx context.Context, opts UpdateOptions) (*UpdateResult, error) {
 		return nil, fmt.Errorf("Windows không hỗ trợ tự cập nhật tại chỗ, vui lòng tải phiên bản mới tại https://github.com/%s/releases", opts.Repo)
 	}
 	if opts.Repo == "" {
-		return nil, fmt.Errorf("missing repo")
+		return nil, fmt.Errorf("thiếu repo")
 	}
 	if opts.BinaryName == "" {
-		return nil, fmt.Errorf("missing binary name")
+		return nil, fmt.Errorf("thiếu tên binary")
 	}
 	client := opts.Client
 	if client == nil {
@@ -71,7 +71,7 @@ func Update(ctx context.Context, opts UpdateOptions) (*UpdateResult, error) {
 
 	tmp, err := os.MkdirTemp("", "ainovel-cli-update-*")
 	if err != nil {
-		return nil, fmt.Errorf("create temp dir: %w", err)
+		return nil, fmt.Errorf("tạo thư mục tạm: %w", err)
 	}
 	defer os.RemoveAll(tmp)
 
@@ -99,15 +99,15 @@ func fetchRelease(ctx context.Context, client *http.Client, repo, target string)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("query release: %w", err)
+		return nil, fmt.Errorf("truy vấn release: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("query release: %s", resp.Status)
+		return nil, fmt.Errorf("truy vấn release: %s", resp.Status)
 	}
 	var rel release
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return nil, fmt.Errorf("decode release: %w", err)
+		return nil, fmt.Errorf("giải mã release: %w", err)
 	}
 	return &rel, nil
 }
@@ -165,19 +165,19 @@ func download(ctx context.Context, client *http.Client, url, dst string) error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("download release asset: %w", err)
+		return fmt.Errorf("tải tài nguyên phát hành: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("download release asset: %s", resp.Status)
+		return fmt.Errorf("tải tài nguyên phát hành: %s", resp.Status)
 	}
 	f, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
-		return fmt.Errorf("create archive: %w", err)
+		return fmt.Errorf("tạo tệp nén: %w", err)
 	}
 	defer f.Close()
 	if _, err := io.Copy(f, resp.Body); err != nil {
-		return fmt.Errorf("write archive: %w", err)
+		return fmt.Errorf("ghi tệp nén: %w", err)
 	}
 	return nil
 }
@@ -185,12 +185,12 @@ func download(ctx context.Context, client *http.Client, url, dst string) error {
 func extractBinary(archivePath, dstDir, binaryName string) (string, error) {
 	f, err := os.Open(archivePath)
 	if err != nil {
-		return "", fmt.Errorf("open archive: %w", err)
+		return "", fmt.Errorf("mở gói nén: %w", err)
 	}
 	defer f.Close()
 	gz, err := gzip.NewReader(f)
 	if err != nil {
-		return "", fmt.Errorf("read archive gzip: %w", err)
+		return "", fmt.Errorf("đọc gzip của gói nén: %w", err)
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
@@ -200,7 +200,7 @@ func extractBinary(archivePath, dstDir, binaryName string) (string, error) {
 			break
 		}
 		if err != nil {
-			return "", fmt.Errorf("read archive tar: %w", err)
+			return "", fmt.Errorf("đọc tar của gói nén: %w", err)
 		}
 		if hdr.Typeflag != tar.TypeReg || filepath.Base(hdr.Name) != binaryName {
 			continue
@@ -208,14 +208,14 @@ func extractBinary(archivePath, dstDir, binaryName string) (string, error) {
 		out := filepath.Join(dstDir, binaryName)
 		w, err := os.OpenFile(out, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 		if err != nil {
-			return "", fmt.Errorf("extract binary: %w", err)
+			return "", fmt.Errorf("trích xuất binary: %w", err)
 		}
 		if _, err := io.Copy(w, tr); err != nil {
 			_ = w.Close()
-			return "", fmt.Errorf("extract binary: %w", err)
+			return "", fmt.Errorf("trích xuất binary: %w", err)
 		}
 		if err := w.Close(); err != nil {
-			return "", fmt.Errorf("extract binary: %w", err)
+			return "", fmt.Errorf("trích xuất binary: %w", err)
 		}
 		return out, nil
 	}
@@ -251,15 +251,15 @@ func replaceExecutable(dst, src string) (string, error) {
 	backup := dst + ".old"
 	_ = os.Remove(backup)
 	if err := os.Rename(dst, backup); err != nil {
-		return "", fmt.Errorf("backup current executable: %w", err)
+		return "", fmt.Errorf("sao lưu file thực thi hiện tại: %w", err)
 	}
 	if err := os.Rename(stage, dst); err != nil {
 		_ = os.Rename(backup, dst)
-		return "", fmt.Errorf("replace executable: %w", err)
+		return "", fmt.Errorf("thay thế file thực thi: %w", err)
 	}
 	stageInstalled = true
 	if err := os.Remove(backup); err != nil {
-		return "", fmt.Errorf("remove backup executable: %w", err)
+		return "", fmt.Errorf("xóa bản sao lưu file thực thi: %w", err)
 	}
 	return dst, nil
 }
@@ -267,12 +267,12 @@ func replaceExecutable(dst, src string) (string, error) {
 func stageExecutable(dir, base, src string, perm os.FileMode) (string, error) {
 	in, err := os.Open(src)
 	if err != nil {
-		return "", fmt.Errorf("open new executable: %w", err)
+		return "", fmt.Errorf("mở file thực thi mới: %w", err)
 	}
 	defer in.Close()
 	out, err := os.CreateTemp(dir, base+".new-*")
 	if err != nil {
-		return "", fmt.Errorf("create staged executable: %w", err)
+		return "", fmt.Errorf("tạo file thực thi tạm: %w", err)
 	}
 	stage := out.Name()
 	ok := false
@@ -283,13 +283,13 @@ func stageExecutable(dir, base, src string, perm os.FileMode) (string, error) {
 	}()
 	if _, err := io.Copy(out, in); err != nil {
 		_ = out.Close()
-		return "", fmt.Errorf("write staged executable: %w", err)
+		return "", fmt.Errorf("ghi file thực thi tạm: %w", err)
 	}
 	if err := out.Close(); err != nil {
-		return "", fmt.Errorf("close staged executable: %w", err)
+		return "", fmt.Errorf("đóng file thực thi tạm: %w", err)
 	}
 	if err := os.Chmod(stage, perm); err != nil {
-		return "", fmt.Errorf("chmod staged executable: %w", err)
+		return "", fmt.Errorf("đặt quyền file thực thi tạm: %w", err)
 	}
 	ok = true
 	return stage, nil

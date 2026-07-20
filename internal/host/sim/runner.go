@@ -17,10 +17,10 @@ const maxSourceRunes = 60000
 
 func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 	if deps.Store == nil || deps.LLM == nil {
-		return nil, fmt.Errorf("deps incomplete")
+		return nil, fmt.Errorf("deps chưa đầy đủ")
 	}
 	if strings.TrimSpace(opts.SourceDir) == "" {
-		return nil, fmt.Errorf("source dir is required")
+		return nil, fmt.Errorf("source dir là bắt buộc")
 	}
 
 	events := make(chan Event, 32)
@@ -90,24 +90,24 @@ func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 
 func AnalyzeSource(ctx context.Context, llm LLMChat, systemPrompt string, source scannedSource) (*domain.SimulationSourceReport, error) {
 	if strings.TrimSpace(systemPrompt) == "" {
-		return nil, fmt.Errorf("source prompt is required")
+		return nil, fmt.Errorf("source prompt là bắt buộc")
 	}
 	resp, err := llm.Generate(ctx, []agentcore.Message{
 		agentcore.SystemMsg(systemPrompt),
 		agentcore.UserMsg(buildSourceUserPrompt(source)),
 	}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("llm analyze %s: %w", source.RelativePath, err)
+		return nil, fmt.Errorf("llm phân tích %s: %w", source.RelativePath, err)
 	}
 	if resp == nil {
-		return nil, fmt.Errorf("llm analyze %s: nil response", source.RelativePath)
+		return nil, fmt.Errorf("llm phân tích %s: phản hồi nil", source.RelativePath)
 	}
 	var report domain.SimulationSourceReport
 	if err := parseJSONPayload(resp.Message.TextContent(), &report); err != nil {
-		return nil, fmt.Errorf("parse source report %s: %w", source.RelativePath, err)
+		return nil, fmt.Errorf("phân tích báo cáo nguồn %s: %w", source.RelativePath, err)
 	}
 	if strings.TrimSpace(report.Summary) == "" {
-		return nil, fmt.Errorf("source report %s: summary is required", source.RelativePath)
+		return nil, fmt.Errorf("báo cáo nguồn %s: summary là bắt buộc", source.RelativePath)
 	}
 	now := time.Now().Format(time.RFC3339)
 	report.RelativePath = source.RelativePath
@@ -119,21 +119,21 @@ func AnalyzeSource(ctx context.Context, llm LLMChat, systemPrompt string, source
 
 func MergeSynthesis(ctx context.Context, llm LLMChat, systemPrompt string, existing *domain.SimulationProfile, reports []domain.SimulationSourceReport) (*domain.SimulationSynthesis, error) {
 	if strings.TrimSpace(systemPrompt) == "" {
-		return nil, fmt.Errorf("merge prompt is required")
+		return nil, fmt.Errorf("merge prompt là bắt buộc")
 	}
 	resp, err := llm.Generate(ctx, []agentcore.Message{
 		agentcore.SystemMsg(systemPrompt),
 		agentcore.UserMsg(buildMergeUserPrompt(existing, reports)),
 	}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("llm merge profile: %w", err)
+		return nil, fmt.Errorf("llm hợp nhất hồ sơ: %w", err)
 	}
 	if resp == nil {
-		return nil, fmt.Errorf("llm merge profile: nil response")
+		return nil, fmt.Errorf("llm hợp nhất hồ sơ: phản hồi nil")
 	}
 	var synthesis domain.SimulationSynthesis
 	if err := parseJSONPayload(resp.Message.TextContent(), &synthesis); err != nil {
-		return nil, fmt.Errorf("parse synthesis: %w", err)
+		return nil, fmt.Errorf("phân tích synthesis: %w", err)
 	}
 	return &synthesis, nil
 }
@@ -258,7 +258,7 @@ func buildSourceUserPrompt(source scannedSource) string {
 		"content":       compactSourceContent(source.content),
 	}
 	data, _ := json.MarshalIndent(payload, "", "  ")
-	return "Analyze this simulation corpus source and return only the requested JSON object.\n\n" + string(data)
+	return "Phân tích nguồn này của ngữ liệu mô phỏng và chỉ trả về đối tượng JSON được yêu cầu.\n\n" + string(data)
 }
 
 func buildMergeUserPrompt(existing *domain.SimulationProfile, reports []domain.SimulationSourceReport) string {
@@ -267,7 +267,7 @@ func buildMergeUserPrompt(existing *domain.SimulationProfile, reports []domain.S
 		"source_reports":   reports,
 	}
 	data, _ := json.MarshalIndent(payload, "", "  ")
-	return "Merge these reports into a reusable writing simulation profile. Return only the requested JSON object.\n\n" + string(data)
+	return "Hợp nhất các báo cáo này thành một hồ sơ mô phỏng viết có thể tái sử dụng. Chỉ trả về đối tượng JSON được yêu cầu.\n\n" + string(data)
 }
 
 func compactSourceContent(s string) string {

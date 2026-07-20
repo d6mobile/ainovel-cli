@@ -12,35 +12,35 @@ import (
 
 func TestAllowsFilter(t *testing.T) {
 	if New("", nil).allows(KindDeadlock) != true {
-		t.Error("events 缺省应全放行")
+		t.Error("mặc định events phải cho qua toàn bộ")
 	}
 	n := New("", []string{KindRunEnd, KindBudget})
 	if !n.allows(KindRunEnd) || !n.allows(KindBudget) {
-		t.Error("列入的 kind 应放行")
+		t.Error("kind được liệt kê phải được cho qua")
 	}
 	if n.allows(KindDeadlock) {
-		t.Error("未列入的 kind 应拦截")
+		t.Error("kind không được liệt kê phải bị chặn")
 	}
 	var nilN *Notifier
 	if nilN.allows(KindRunEnd) {
-		t.Error("nil Notifier 应拦截一切")
+		t.Error("Notifier nil phải chặn mọi thứ")
 	}
-	nilN.Send(Notification{Kind: KindRunEnd}) // 不应 panic
+	nilN.Send(Notification{Kind: KindRunEnd})
 }
 
 func TestKindsAreUniqueAndKnown(t *testing.T) {
 	seen := map[string]bool{}
 	for _, kind := range Kinds() {
 		if kind == "" || seen[kind] {
-			t.Fatalf("通知事件名必须非空且唯一: %q", kind)
+			t.Fatalf("tên sự kiện thông báo phải không rỗng và duy nhất: %q", kind)
 		}
 		seen[kind] = true
 		if !IsKnownKind(kind) {
-			t.Fatalf("Kinds 与 IsKnownKind 不一致: %q", kind)
+			t.Fatalf("Kinds và IsKnownKind không nhất quán: %q", kind)
 		}
 	}
 	if IsKnownKind("repeat") {
-		t.Fatal("旧 repeat 事件不应继续出现在新契约中")
+		t.Fatal("sự kiện repeat cũ không được tiếp tục xuất hiện trong hợp đồng mới")
 	}
 }
 
@@ -60,27 +60,27 @@ func TestCommandChannelEnvAndStdin(t *testing.T) {
 			`[System.IO.File]::WriteAllText(` + powerShellQuote(jsonFile) + `, $payload, $utf8)`
 	}
 	n := New(command, nil)
-	nt := Notification{Kind: KindBudget, Level: "warn", Title: "ainovel: 预算", Body: "已花费 $8.00"}
-	n.deliver(nt) // 同步调用以便断言
+	nt := Notification{Kind: KindBudget, Level: "warn", Title: "ainovel: Ngân sách", Body: "Đã dùng $8.00"}
+	n.deliver(nt)
 
 	env, err := os.ReadFile(envFile)
 	if err != nil {
-		t.Fatalf("command 未执行: %v", err)
+		t.Fatalf("command chưa được thực thi: %v", err)
 	}
-	if got := strings.TrimSpace(string(env)); got != "budget|warn|ainovel: 预算|已花费 $8.00" {
-		t.Errorf("环境变量传递不符: %q", got)
+	if got := strings.TrimSpace(string(env)); got != "budget|warn|ainovel: Ngân sách|Đã dùng $8.00" {
+		t.Errorf("truyền biến môi trường không khớp: %q", got)
 	}
 
 	raw, err := os.ReadFile(jsonFile)
 	if err != nil {
-		t.Fatalf("stdin 未传递: %v", err)
+		t.Fatalf("stdin chưa được truyền: %v", err)
 	}
 	var decoded Notification
 	if err := json.Unmarshal(raw, &decoded); err != nil {
-		t.Fatalf("stdin 非合法 JSON: %v", err)
+		t.Fatalf("stdin không hợp lệ JSON: %v", err)
 	}
 	if decoded != nt {
-		t.Errorf("stdin JSON 不符: %+v", decoded)
+		t.Errorf("JSON trong stdin không khớp: %+v", decoded)
 	}
 }
 
@@ -95,7 +95,7 @@ func TestCommandChannelTimeoutKill(t *testing.T) {
 	start := time.Now()
 	n.deliver(Notification{Kind: KindRunEnd})
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Fatalf("超时未强杀, 阻塞 %v", elapsed)
+		t.Fatalf("hết thời gian mà không bị kill, bị chặn %v", elapsed)
 	}
 }
 

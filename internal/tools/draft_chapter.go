@@ -59,13 +59,13 @@ func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (jso
 		Mode    string `json:"mode"`
 	}
 	if err := json.Unmarshal(args, &a); err != nil {
-		return nil, fmt.Errorf("invalid args: %w: %w", errs.ErrToolArgs, err)
+		return nil, fmt.Errorf("tham số không hợp lệ: %w: %w", errs.ErrToolArgs, err)
 	}
 	if a.Chapter <= 0 {
-		return nil, fmt.Errorf("chapter must be > 0: %w", errs.ErrToolArgs)
+		return nil, fmt.Errorf("chapter phải lớn hơn 0: %w", errs.ErrToolArgs)
 	}
 	if a.Content == "" {
-		return nil, fmt.Errorf("content must not be empty: %w", errs.ErrToolArgs)
+		return nil, fmt.Errorf("content không được để trống: %w", errs.ErrToolArgs)
 	}
 	if err := t.store.Progress.ValidateChapterWork(a.Chapter); err != nil {
 		return nil, err
@@ -87,23 +87,23 @@ func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (jso
 		}
 	}
 	if err := t.store.Progress.StartChapter(a.Chapter); err != nil {
-		return nil, fmt.Errorf("mark chapter in progress: %w", err)
+		return nil, fmt.Errorf("đánh dấu chương đang viết: %w", err)
 	}
 
 	switch a.Mode {
 	case "append":
 		if err := t.store.Drafts.AppendDraft(a.Chapter, a.Content); err != nil {
-			return nil, fmt.Errorf("append draft: %w", err)
+			return nil, fmt.Errorf("nối thêm bản nháp: %w", err)
 		}
 		full, err := t.store.Drafts.LoadDraft(a.Chapter)
 		if err != nil {
-			return nil, fmt.Errorf("load draft after append: %w", err)
+			return nil, fmt.Errorf("tải bản nháp sau khi nối thêm: %w", err)
 		}
 		if _, err := t.store.Checkpoints.AppendArtifact(
 			domain.ChapterScope(a.Chapter), "draft",
 			fmt.Sprintf("drafts/%02d.draft.md", a.Chapter),
 		); err != nil {
-			return nil, fmt.Errorf("checkpoint draft: %w", err)
+			return nil, fmt.Errorf("ghi checkpoint bản nháp: %w", err)
 		}
 		return json.Marshal(map[string]any{
 			"written":    true,
@@ -114,13 +114,13 @@ func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (jso
 		})
 	default: // write
 		if err := t.store.Drafts.SaveDraft(a.Chapter, a.Content); err != nil {
-			return nil, fmt.Errorf("save draft: %w", err)
+			return nil, fmt.Errorf("lưu bản nháp: %w", err)
 		}
 		if _, err := t.store.Checkpoints.AppendArtifact(
 			domain.ChapterScope(a.Chapter), "draft",
 			fmt.Sprintf("drafts/%02d.draft.md", a.Chapter),
 		); err != nil {
-			return nil, fmt.Errorf("checkpoint draft: %w", err)
+			return nil, fmt.Errorf("ghi checkpoint bản nháp: %w", err)
 		}
 		return json.Marshal(map[string]any{
 			"written":    true,
