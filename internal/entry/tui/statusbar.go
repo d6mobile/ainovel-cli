@@ -74,7 +74,7 @@ func renderStatusBar(snap host.UISnapshot, outputDir string, width int) string {
 		right = dim.Render("./" + filepath.Base(outputDir))
 	}
 	if left == "" && right == "" {
-		return dim.Render("READY")
+		return dim.Render("Sẵn sàng")
 	}
 	return joinInlineSides(left, right, width)
 }
@@ -94,9 +94,19 @@ func modelInfoSuffix(snap host.UISnapshot) string {
 func formatThinkingLevel(level string) string {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "":
-		return "auto"
+		return "tự động"
 	case "medium":
-		return "med"
+		return "trung bình"
+	case "off":
+		return "tắt"
+	case "low":
+		return "thấp"
+	case "high":
+		return "cao"
+	case "xhigh":
+		return "rất cao"
+	case "max":
+		return "cao nhất"
 	default:
 		return strings.ToLower(strings.TrimSpace(level))
 	}

@@ -176,7 +176,7 @@ func renderCommandPalette(width int, items []commandPaletteItem, cursor int) str
 		selectedIdx = 0
 	}
 	hint := mutedStyle.Render("↑↓ chọn · Tab/Enter chấp nhận · Esc đóng")
-	usage := "Usage: " + visible[selectedIdx].Usage
+	usage := "Cách dùng: " + visible[selectedIdx].Usage
 	if remaining > 0 {
 		usage = usage + " · còn " + strconv.Itoa(remaining) + " lệnh nữa"
 	}

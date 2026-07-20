@@ -154,7 +154,7 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 	subtitle := lipgloss.NewStyle().
 		Foreground(colorMuted).
 		Italic(true).
-		Render("AI-Powered Novel Creation Engine")
+		Render("Công cụ sáng tác tiểu thuyết ứng dụng AI")
 
 	//
 	divW := 44
@@ -166,8 +166,8 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 
 	//
 	features := []struct{ icon, label, desc string }{
-		{">>", "Phối hợp nhiều mô hình", "Architect lập kế hoạch / Writer sáng tác / Editor thẩm định"},
-		{"::", "Khôi phục từ điểm dừng", "Tự động viết tiếp từ tiến độ trước sau khi crash hoặc gián đoạn"},
+		{">>", "Phối hợp nhiều mô hình", "Kiến trúc sư lập kế hoạch / Người viết sáng tác / Biên tập viên thẩm định"},
+		{"::", "Khôi phục từ điểm dừng", "Tự động viết tiếp từ tiến độ trước sau khi sập hoặc gián đoạn"},
 		{"<>", "Can thiệp thời gian thực", "Điều chỉnh hướng cốt truyện bất cứ lúc nào trong quá trình sáng tác"},
 		{"##", "Truyện dài phân tầng", "Hỗ trợ sáng tác truyện dài theo cấu trúc quyển-cung-chương"},
 	}

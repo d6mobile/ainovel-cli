@@ -416,7 +416,7 @@ func (m Model) handleModelConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				state.cursor = 0
 			case "save":
 				state.saving = true
-				state.message = "Đang kiểm tra và lưu cấu hình chung..."
+				state.message = "Đang kiểm tra và lưu cài đặt chung..."
 				return m, saveGeneralConfiguration(m.runtime, state.generalDraft())
 			}
 		}
@@ -496,12 +496,12 @@ func (m Model) handleModelConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				state.generalNotify.Events = nil
 				enabled := true
 				state.generalNotify.Enabled = &enabled
-				state.message = "Đã chọn tất cả events"
+				state.message = "Đã chọn tất cả sự kiện"
 			case 1:
 				state.generalNotify.Events = nil
 				enabled := false
 				state.generalNotify.Enabled = &enabled
-				state.message = "Đã tắt notify; bật lại để gửi events"
+				state.message = "Đã tắt thông báo; bật lại để gửi sự kiện"
 			default:
 				state.toggleNotifyEvent(notify.Kinds()[state.cursor-2])
 				state.message = ""
@@ -784,9 +784,9 @@ func indexOfString(items []string, value string) int {
 
 func (s *modelConfigState) generalFields() []hubField {
 	return []hubField{
-		{"style", "Style", s.generalStyle},
-		{"budget", "Budget", s.budgetSummary()},
-		{"notify", "Notify", s.notifySummary()},
+		{"style", "Phong cách", s.generalStyle},
+		{"budget", "Ngân sách", s.budgetSummary()},
+		{"notify", "Thông báo", s.notifySummary()},
 		{"save", "Lưu cài đặt chung", ""},
 	}
 }
@@ -811,18 +811,18 @@ func (s *modelConfigState) budgetSummary() string {
 	if s.generalBudget.BookUSD <= 0 {
 		return "tắt"
 	}
-	hard := "off"
+	hard := "tắt"
 	if s.generalBudget.HardStop {
-		hard = "on"
+		hard = "bật"
 	}
-	return fmt.Sprintf("%.2f USD, warn %.0f%%, hard stop: %s", s.generalBudget.BookUSD, s.effectiveWarnRatio()*100, hard)
+	return fmt.Sprintf("%.2f USD, cảnh báo %.0f%%, dừng cứng: %s", s.generalBudget.BookUSD, s.effectiveWarnRatio()*100, hard)
 }
 
 func (s *modelConfigState) notifySummary() string {
 	if !s.generalNotify.IsEnabled() {
-		return "off"
+		return "tắt"
 	}
-	return fmt.Sprintf("on, %d events", s.notifyEventCount())
+	return fmt.Sprintf("bật, %d sự kiện", s.notifyEventCount())
 }
 
 func (s *modelConfigState) notifyEventCount() int {
@@ -848,9 +848,9 @@ func formatFloatSetting(value float64, fallback string) string {
 
 func formatBoolSetting(value bool) string {
 	if value {
-		return "on"
+		return "bật"
 	}
-	return "off"
+	return "tắt"
 }
 
 func emptyAsDefault(value, fallback string) string {
@@ -926,10 +926,10 @@ func renderModelConfigModal(width int, state *modelConfigState) string {
 
 	switch state.step {
 	case configStepProvider:
-		lines = append(lines, configHeading("Chọn Provider để chỉnh sửa hoặc thêm mới"))
+		lines = append(lines, configHeading("Chọn nhà cung cấp để chỉnh sửa hoặc thêm mới"))
 		lines = append(lines, renderConfigChoices(labelsForProviderChoices(state.providerChoices), state.cursor, contentW, 12)...)
 	case configStepAddPicker:
-		lines = append(lines, configHeading("Chọn Provider muốn thêm"))
+		lines = append(lines, configHeading("Chọn nhà cung cấp muốn thêm"))
 		lines = append(lines, renderConfigChoices(labelsForProviderChoices(state.presetChoices), state.cursor, contentW, 12)...)
 	case configStepGeneral:
 		lines = append(lines, configHeading("Cài đặt chung"))
@@ -939,29 +939,29 @@ func renderModelConfigModal(width int, state *modelConfigState) string {
 		lines = append(lines, configHeading("Phong cách viết"))
 		lines = append(lines, renderConfigChoices(configStyleOptions, state.cursor, contentW, 8)...)
 	case configStepGeneralBudget:
-		lines = append(lines, configHeading("Budget"))
+		lines = append(lines, configHeading("Ngân sách"))
 		lines = append(lines, lipgloss.NewStyle().Foreground(colorDim).Render("Trạng thái: "+state.budgetSummary()))
 		lines = append(lines, renderFieldList(state.generalBudgetFields(), state.cursor, contentW)...)
-		hint = "↑↓ Chọn · Enter Chỉnh/Toggle · Esc Quay lại"
+		hint = "↑↓ Chọn · Enter Chỉnh/Bật tắt · Esc Quay lại"
 	case configStepGeneralBudgetInput:
-		lines = append(lines, configHeading("Budget - "+state.editSetting))
+		lines = append(lines, configHeading("Ngân sách - "+state.editSetting))
 		lines = append(lines, renderConfigInput(state.input, false, contentW))
 		hint = configInputHint
 	case configStepGeneralNotify:
-		lines = append(lines, configHeading("Notify"))
+		lines = append(lines, configHeading("Thông báo"))
 		lines = append(lines, renderFieldList(state.generalNotifyFields(), state.cursor, contentW)...)
-		hint = "↑↓ Chọn · Enter Chỉnh/Toggle · Esc Quay lại"
+		hint = "↑↓ Chọn · Enter Chỉnh/Bật tắt · Esc Quay lại"
 	case configStepGeneralNotifyCommand:
-		lines = append(lines, configHeading("Notify command"))
+		lines = append(lines, configHeading("Lệnh thông báo"))
 		lines = append(lines, lipgloss.NewStyle().Foreground(colorDim).Render("Để trống = dùng notifier mặc định của hệ điều hành"))
 		lines = append(lines, renderConfigInput(state.input, false, contentW))
 		hint = configInputHint
 	case configStepGeneralNotifyEvents:
-		lines = append(lines, configHeading("Notify events"))
+		lines = append(lines, configHeading("Sự kiện thông báo"))
 		lines = append(lines, renderNotifyEventChoices(state, contentW)...)
-		hint = "↑↓ Chọn · Enter Toggle · Esc Quay lại"
+		hint = "↑↓ Chọn · Enter Bật/tắt · Esc Quay lại"
 	case configStepCustomName:
-		lines = append(lines, configHeading("Tên Provider tùy chỉnh"), renderConfigInput(state.input, false, contentW))
+		lines = append(lines, configHeading("Tên nhà cung cấp tùy chỉnh"), renderConfigInput(state.input, false, contentW))
 		hint = configInputHint
 	case configStepHub:
 		heading := state.provider
@@ -992,7 +992,7 @@ func renderModelConfigModal(width int, state *modelConfigState) string {
 		lines = append(lines, configHeading(label), renderConfigInput(state.input, true, contentW))
 		hint = configInputHint
 	case configStepBaseURL:
-		lines = append(lines, configHeading("Base URL (để trống để dùng địa chỉ mặc định của Provider)"), renderConfigInput(state.input, false, contentW))
+		lines = append(lines, configHeading("Base URL (để trống để dùng địa chỉ mặc định của nhà cung cấp)"), renderConfigInput(state.input, false, contentW))
 		hint = configInputHint
 	case configStepModels:
 		lines = append(lines, configHeading("Quản lý danh sách mô hình"))

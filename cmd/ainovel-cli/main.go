@@ -32,7 +32,7 @@ func main() {
 
 	opts, args, err := parseCLIOptions(os.Args[1:])
 	if err != nil {
-		die("flags: %v", err)
+		die("cờ lệnh: %v", err)
 	}
 	if opts.Version {
 		buildversion.Print(os.Stdout, versionInfo())
@@ -40,7 +40,7 @@ func main() {
 	}
 	if opts.Update {
 		if err := runSelfUpdate(opts.UpdateVersion); err != nil {
-			fmt.Fprintf(os.Stderr, "update: %v\n", err)
+			fmt.Fprintf(os.Stderr, "cập nhật: %v\n", err)
 			os.Exit(1)
 		}
 		return
@@ -50,11 +50,11 @@ func main() {
 	// Kiểm tra xem đã cần chạy wizard thiết lập lần đầu hay chưa.
 	if bootstrap.NeedsSetup() {
 		if opts.Headless {
-			die("error: chế độ headless không hỗ trợ thiết lập lần đầu; hãy chạy TUI một lần để hoàn tất cấu hình")
+			die("lỗi: chế độ headless không hỗ trợ thiết lập lần đầu; hãy chạy TUI một lần để hoàn tất cấu hình")
 		}
 		setupCfg, err := bootstrap.RunSetup()
 		if err != nil {
-			die("setup: %v", err)
+			die("thiết lập: %v", err)
 		}
 		// Chạy tiếp bằng cấu hình vừa thiết lập.
 		runWithConfig(setupCfg, opts, args)
@@ -64,7 +64,7 @@ func main() {
 	// Tải cấu hình đã lưu.
 	cfg, err := bootstrap.LoadConfig()
 	if err != nil {
-		die("config: %v", err)
+		die("cấu hình: %v", err)
 	}
 
 	runWithConfig(cfg, opts, args)
@@ -100,7 +100,7 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 	rules.EnsureHomeRulesDir()
 
 	if len(args) > 0 {
-		die("error: không còn hỗ trợ truyền yêu cầu tiểu thuyết trực tiếp qua dòng lệnh; hãy nhập trong ô TUI sau khi khởi động")
+		die("lỗi: không còn hỗ trợ truyền yêu cầu tiểu thuyết trực tiếp qua dòng lệnh; hãy nhập trong ô TUI sau khi khởi động")
 	}
 
 	// FillDefaults bổ sung OutputDir mặc định trước khi tải assets.
@@ -110,18 +110,18 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 	if opts.Headless {
 		prompt, err := loadPrompt(opts)
 		if err != nil {
-			die("error: %v", err)
+			die("lỗi: %v", err)
 		}
 		if err := headless.Run(cfg, bundle, headless.Options{Prompt: prompt}); err != nil {
-			die("error: %v", err)
+			die("lỗi: %v", err)
 		}
 		return
 	}
 	if opts.Prompt != "" || opts.PromptFile != "" {
-		die("error: --prompt/--prompt-file chỉ dùng được trong chế độ --headless")
+		die("lỗi: --prompt/--prompt-file chỉ dùng được trong chế độ --headless")
 	}
 	if err := tui.Run(cfg, bundle, versionInfo().Version); err != nil {
-		die("error: %v", err)
+		die("lỗi: %v", err)
 	}
 }
 

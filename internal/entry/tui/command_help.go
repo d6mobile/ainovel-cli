@@ -39,10 +39,10 @@ func renderHelpText(width int) string {
 		}
 		b.WriteString(nameStyle.Render("/" + spec.Name))
 		if len(spec.Aliases) > 0 {
-			b.WriteString(usageStyle.Render("  alias: /" + strings.Join(spec.Aliases, " /")))
+			b.WriteString(usageStyle.Render("  bí danh: /" + strings.Join(spec.Aliases, " /")))
 		}
 		b.WriteString("\n")
-		b.WriteString(usageStyle.Render("Usage: " + spec.Usage))
+		b.WriteString(usageStyle.Render("Cách dùng: " + spec.Usage))
 		b.WriteString("\n")
 		b.WriteString(descStyle.Render(wrapText(spec.Description, width)))
 		b.WriteString("\n")

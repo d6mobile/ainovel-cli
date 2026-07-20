@@ -37,9 +37,9 @@ type modelRoleOption struct {
 var modelRoleOptions = []modelRoleOption{
 	{Key: "default", Label: "Mặc định"},
 
-	{Key: "architect", Label: "Architect"},
-	{Key: "writer", Label: "Writer"},
-	{Key: "editor", Label: "Editor"},
+	{Key: "architect", Label: "Kiến trúc sư"},
+	{Key: "writer", Label: "Người viết"},
+	{Key: "editor", Label: "Biên tập viên"},
 }
 
 type thinkingOption struct{ Key, Label string }
@@ -105,7 +105,7 @@ func newModelSwitchState(rt modelRuntime, roleHint string) *modelSwitchState {
 		providers: rt.ConfiguredProviders(),
 	}
 	if len(state.providers) == 0 {
-		state.message = "Hiện không có provider khả dụng"
+		state.message = "Hiện không có nhà cung cấp khả dụng"
 	}
 
 	roleHint = normalizeRoleKey(roleHint)
@@ -249,10 +249,10 @@ func (s *modelSwitchState) syncThinking(rt modelRuntime) {
 
 func (s *modelSwitchState) apply(rt modelRuntime) error {
 	if len(s.providers) == 0 {
-		return fmt.Errorf("Hiện không có provider khả dụng")
+		return fmt.Errorf("Hiện không có nhà cung cấp khả dụng")
 	}
 	if len(s.models) == 0 {
-		return fmt.Errorf("provider %q chưa có mô hình được cấu hình", s.provider())
+		return fmt.Errorf("nhà cung cấp %q chưa có mô hình được cấu hình", s.provider())
 	}
 	wantThinking := s.thinkingKey()
 	if err := rt.SwitchModel(s.role(), s.provider(), s.model()); err != nil {
@@ -314,7 +314,7 @@ func renderModelSwitchBar(width int, state *modelSwitchState) string {
 		Render("/model Chuyển mô hình")
 
 	row1 := renderModelField("Vai trò", state.roleLabel(), state.focus == modelFocusRole)
-	row2 := renderModelField("Provider", state.provider(), state.focus == modelFocusProvider)
+	row2 := renderModelField("Nhà cung cấp", state.provider(), state.focus == modelFocusProvider)
 	row3 := renderModelField("Mô hình", state.modelLabel(), state.focus == modelFocusModel)
 	row4 := renderModelField("Cường độ suy luận", state.thinkingLabel(), state.focus == modelFocusThinking)
 	hint := lipgloss.NewStyle().

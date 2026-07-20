@@ -61,7 +61,7 @@ var setupProviders = []setupProvider{
 	{name: "grok", label: "Grok"},
 	{name: "ollama", label: "Ollama", baseURL: "http://localhost:11434/v1", apiKeyOptional: true},
 	{name: "bedrock", label: "Bedrock", apiKeyOptional: true},
-	{name: "custom", label: "Custom Proxy", needType: true, apiKeyOptional: true},
+	{name: "custom", label: "Proxy tùy chỉnh", needType: true, apiKeyOptional: true},
 }
 
 // ProviderPresets x。
@@ -93,11 +93,11 @@ func RunSetup() (Config, error) {
 
 	providerName := sp.name
 	var pc ProviderConfig
-	printStepDone("Provider", sp.label)
+	printStepDone("Nhà cung cấp", sp.label)
 
 	// Tùy chỉnh： Loại giao thức API
 	if sp.needType {
-		providerName, err = runTextInput("Tên Provider", "my-proxy")
+		providerName, err = runTextInput("Tên nhà cung cấp", "my-proxy")
 		if err != nil {
 			return Config{}, err
 		}
@@ -147,7 +147,7 @@ func RunSetup() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	printStepDone("Model", modelName)
+	printStepDone("Mô hình", modelName)
 	pc.Models = []ModelConfig{{Name: modelName}}
 
 	cfg := Config{
@@ -161,7 +161,7 @@ func RunSetup() (Config, error) {
 	//
 	path := DefaultConfigPath()
 	if err := SaveConfig(path, cfg); err != nil {
-		return cfg, fmt.Errorf("save config: %w", err)
+		return cfg, fmt.Errorf("lưu cấu hình: %w", err)
 	}
 
 	//
@@ -173,7 +173,7 @@ func RunSetup() (Config, error) {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintf(os.Stderr, "%s Cấu hình đã lưu vào %s\n",
 		lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("✓"), path)
-	fmt.Fprintf(os.Stderr, "  Mặc địnhMô hình：%s\n", modelName)
+	fmt.Fprintf(os.Stderr, "  Mô hình mặc định: %s\n", modelName)
 	fmt.Fprintln(os.Stderr, "  Để cấu hình mô hình khác nhau theo vai trò, hãy chỉnh tệp cấu hình.")
 	if rulesDir != "" {
 		fmt.Fprintf(os.Stderr, "  Có thể đặt tùy chọn viết toàn cục trong các tệp .md dưới %s (xem README.txt trong đó)\n", rulesDir)
@@ -210,7 +210,7 @@ func maskKey(key string) string {
 
 func runProviderSelect() (setupProvider, error) {
 	m := setupSelectModel{
-		title: "[1/4] Chọn Provider",
+		title: "[1/4] Chọn nhà cung cấp",
 		items: setupProviders,
 	}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
@@ -220,7 +220,7 @@ func runProviderSelect() (setupProvider, error) {
 	}
 	result := final.(setupSelectModel)
 	if result.cancelled {
-		return setupProvider{}, fmt.Errorf("setup cancelled")
+		return setupProvider{}, fmt.Errorf("thiết lập đã bị hủy")
 	}
 	return result.items[result.cursor], nil
 }
@@ -243,7 +243,7 @@ func runTypeSelect() (string, error) {
 	}
 	result := final.(setupSelectModel)
 	if result.cancelled {
-		return "", fmt.Errorf("setup cancelled")
+		return "", fmt.Errorf("thiết lập đã bị hủy")
 	}
 	return result.items[result.cursor].name, nil
 }
@@ -261,7 +261,7 @@ func runOptionalTextInput(label, placeholder string) (string, error) {
 	}
 	result := final.(setupInputModel)
 	if result.cancelled {
-		return "", fmt.Errorf("setup cancelled")
+		return "", fmt.Errorf("thiết lập đã bị hủy")
 	}
 	return utils.CleanInputLine(result.value), nil
 }
@@ -275,7 +275,7 @@ func runTextInputWithDefault(label, placeholder, defaultValue string) (string, e
 	}
 	result := final.(setupInputModel)
 	if result.cancelled {
-		return "", fmt.Errorf("setup cancelled")
+		return "", fmt.Errorf("thiết lập đã bị hủy")
 	}
 	if result.value == "" && result.defaultValue != "" {
 		return result.defaultValue, nil
