@@ -60,7 +60,7 @@ func buildStoryStateSummary(s *store.Store) string {
 	}
 
 	// Nhân vật chính (core/important), tối đa 8 người
-	if chars, _ := s.Characters.Load(); len(chars) > 0 {
+	if chars, err := s.Characters.Load(); len(chars) > 0 {
 		var names []string
 		for _, c := range chars {
 			if c.Tier == "secondary" || c.Tier == "decorative" {

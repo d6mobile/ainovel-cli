@@ -68,7 +68,7 @@ func (t *CheckConsistencyTool) Execute(_ context.Context, args json.RawMessage) 
 	result["word_count"] = wordCount
 
 	// Dữ liệu đối chiếu: giữ lại dữ liệu kiểm tra nhất quán toàn cục, tránh tải lại dữ liệu đã có trong cửa sổ ngữ cảnh của novel_context
-	if rules, _ := t.store.World.LoadWorldRules(); len(rules) > 0 {
+	if rules, err := t.store.World.LoadWorldRules(); len(rules) > 0 {
 		result["world_rules"] = rules
 	} else {
 		warn("world_rules", err)

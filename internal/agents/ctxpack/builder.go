@@ -32,7 +32,7 @@ type writerStoreSummaryState struct {
 
 func (s *writerStoreSummaryState) warn(scope string, err error) {
 	if s != nil && err != nil {
-		s.warnings = append(s.warnings, fmt.Sprintf("%s 读取失败: %v", scope, err))
+		s.warnings = append(s.warnings, fmt.Sprintf("Đọc %s thất bại: %v", scope, err))
 	}
 }
 
@@ -61,6 +61,7 @@ func buildWriterStoreSummaryText(s *store.Store, budgetTokens int) (string, bool
 		budgetTokens = defaultStoreSummaryBudgetTokens
 	}
 	parts := renderWriterStoreSections(state, budgetTokens, writerStoreSummarySections(state))
+	parts = prependWriterWarnings(parts, state)
 	if len(parts) == 0 {
 		return "", false, nil
 	}
@@ -85,10 +86,19 @@ func buildWriterRestoreText(s *store.Store, budgetTokens int) (string, bool, err
 		budgetTokens = restoreBudgetTokens
 	}
 	parts := renderWriterStoreSections(state, budgetTokens, writerRestoreSections(state))
+	parts = prependWriterWarnings(parts, state)
 	if len(parts) == 0 {
 		return "", false, nil
 	}
 	return "<post-compact-context>\n" + strings.Join(parts, "\n\n") + "\n</post-compact-context>", true, nil
+}
+
+func prependWriterWarnings(parts []string, state *writerStoreSummaryState) []string {
+	if state == nil || len(state.warnings) == 0 {
+		return parts
+	}
+	warning := "## Lỗi dữ liệu\n" + strings.Join(state.warnings, "\n")
+	return append([]string{warning}, parts...)
 }
 
 func loadWriterStoreSummaryState(s *store.Store) (*writerStoreSummaryState, bool, error) {

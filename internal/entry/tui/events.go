@@ -28,6 +28,7 @@ type (
 		reqID      int
 		report     diag.Report
 		exportPath string // đường dẫn tuyệt đối của file chẩn đoán đã ẩn danh; rỗng = xuất thất bại
+		exportErr  error
 		finishedAt time.Time
 	}
 	askUserMsg       askUserRequest
@@ -247,7 +248,7 @@ func loadReport(dir string, reqID int) tea.Cmd {
 		// Diagnose = chẩn đoán sáng tác + phát hiện runtime; Finding runtime cũng được đưa lên báo cáo màn hình.
 		rep, rc := diag.Diagnose(s)
 		// Tái sử dụng rep+rc để ghi file chẩn đoán đã ẩn danh (xuất thất bại không ảnh hưởng báo cáo trên màn hình).
-		exportPath, _ := diag.WriteExport(s, rep, rc)
+		exportPath, exportErr := diag.WriteExport(s, rep, rc)
 		return reportLoadedMsg{
 			reqID:      reqID,
 			report:     rep,

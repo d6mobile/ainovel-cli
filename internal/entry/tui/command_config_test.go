@@ -22,6 +22,15 @@ func hubFieldIDs(fields []hubField) []string {
 	return ids
 }
 
+func hubFieldIndex(fields []hubField, id string) int {
+	for i, f := range fields {
+		if f.id == id {
+			return i
+		}
+	}
+	return -1
+}
+
 // Selecting an existing Provider should open the detail hub (review info first, then tweak fields), not jump straight into "edit protocol".
 func TestSelectingProviderOpensHub(t *testing.T) {
 	st := &modelConfigState{editModelIdx: -1}
@@ -57,13 +66,9 @@ func TestCustomProviderHubShowsProtocolAndEndpoint(t *testing.T) {
 	}
 }
 
-// Esc backs out step by step: field editor → hub → provider list → close.
+// Esc backs out step by step: hub → provider list → close.
 func TestEscapeBackHierarchy(t *testing.T) {
-	st := &modelConfigState{}
-	st.step = configStepBaseURL
-	if got, ok := st.escapeBack(); !ok || got != configStepHub {
-		t.Fatalf("Esc ở editor trường phải quay về hub, got %d,%v", got, ok)
-	}
+	st := &modelConfigState{step: configStepHub}
 	if got, ok := st.escapeBack(); !ok || got != configStepProvider {
 		t.Fatalf("Esc ở hub phải quay về danh sách, got %d,%v", got, ok)
 	}
@@ -80,8 +85,8 @@ func TestModelListAddEntryOpensNameInput(t *testing.T) {
 	st.cursor = len(st.models) // stop on "+ Add model..."
 	m := Model{modelConfig: st}
 	m.handleModelConfigKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if st.step != configStepModelName || st.editModelIdx != -1 {
-		t.Fatalf("chọn mục thêm mới phải vào bước đặt tên (step=%d, idx=%d)", st.step, st.editModelIdx)
+	if st.step != configStepModels || st.editModelIdx != len(st.models)-1 || st.editingField != configModelNameField {
+		t.Fatalf("chọn mục thêm mới phải vào sửa tên inline (step=%d, idx=%d field=%q)", st.step, st.editModelIdx, st.editingField)
 	}
 }
 
@@ -111,34 +116,22 @@ func TestModelRenameProducesExplicitDraftAndReferenceNotice(t *testing.T) {
 	}
 	m := Model{modelConfig: st}
 	m.handleModelConfigKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if st.step != configStepModelDetail || st.editModelIdx != 1 {
-		t.Fatalf("chọn mô hình phải vào chi tiết (step=%d, idx=%d)", st.step, st.editModelIdx)
+	if st.step != configStepModels || st.editModelIdx != 0 || st.editingField != configModelNameField {
+		t.Fatalf("chọn mô hình phải sửa tên inline (step=%d, idx=%d field=%q)", st.step, st.editModelIdx, st.editingField)
 	}
-	ids := hubFieldIDs(st.modelDetailFields())
-	// The detail view only keeps context window / delete; "set default" has been removed (switching is handled by /model).
-	if slices.Contains(ids, "default") {
-		t.Fatalf("chi tiết mô hình không được còn “đặt làm mặc định”, got %v", ids)
-	}
-	for _, want := range []string{"window", "delete"} {
-		if !slices.Contains(ids, want) {
-			t.Fatalf("chi tiết mô hình thiếu %q, got %v", want, ids)
-		}
+	st.input.SetValue("new")
+	m.handleModelConfigKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if st.models[0].Name != "new" || !strings.Contains(st.message, "tham chiếu") {
+		t.Fatalf("đổi tên phải ghi draft và cảnh báo tham chiếu, model=%#v message=%q", st.models[0], st.message)
 	}
 }
 
-// After editing an existing model's window, return to its detail view; Esc also walks detail → list (the add flow returns to naming).
 func TestModelWindowEscapeHierarchy(t *testing.T) {
-	editing := &modelConfigState{step: configStepModelWindow, editModelIdx: 0}
-	if got, ok := editing.escapeBack(); !ok || got != configStepModelDetail {
-		t.Fatalf("Esc khi sửa cửa sổ mô hình hiện có phải quay về chi tiết, got %d,%v", got, ok)
-	}
-	adding := &modelConfigState{step: configStepModelWindow, editModelIdx: -1}
-	if got, ok := adding.escapeBack(); !ok || got != configStepModelName {
-		t.Fatalf("Esc khi thêm cửa sổ mới phải quay về đặt tên, got %d,%v", got, ok)
-	}
-	detail := &modelConfigState{step: configStepModelDetail}
-	if got, ok := detail.escapeBack(); !ok || got != configStepModels {
-		t.Fatalf("Esc ở chi tiết mô hình phải quay về danh sách, got %d,%v", got, ok)
+	state := &modelConfigState{step: configStepModels, editModelIdx: 0, editingField: configModelWindowField}
+	m := Model{modelConfig: state}
+	m.handleModelConfigKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if state.step != configStepModels || state.editingField != "" || state.editModelIdx != -1 {
+		t.Fatalf("Esc khi sửa cửa sổ mô hình phải hủy edit inline, step=%d field=%q idx=%d", state.step, state.editingField, state.editModelIdx)
 	}
 }
 
@@ -247,7 +240,7 @@ func TestSaveConfigHighlightsOnlyWhenDirty(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(oldProfile) })
 	lines := renderProviderHubFields(state, 68)
-	want := lipgloss.NewStyle().Foreground(colorSuccess).Render("保存配置")
+	want := lipgloss.NewStyle().Foreground(colorSuccess).Render("Lưu cấu hình")
 	found := false
 	for _, line := range lines {
 		if strings.Contains(line, want) {
@@ -290,7 +283,7 @@ func TestProviderHubDeleteClearsOnlyOptionalAPIKey(t *testing.T) {
 	optional.cursor = hubFieldIndex(optional.hubFields(), "key")
 	m := Model{modelConfig: optional}
 	m.handleModelConfigKey(tea.KeyMsg{Type: tea.KeyDelete})
-	if optional.apiKeyAction != host.APIKeyClear || optional.keyStatus() != "已清除" {
+	if optional.apiKeyAction != host.APIKeyClear || optional.keyStatus() != "Đã xóa" {
 		t.Fatalf("可选 Key 的 Delete 应标记清除，action=%q status=%q", optional.apiKeyAction, optional.keyStatus())
 	}
 
@@ -299,7 +292,7 @@ func TestProviderHubDeleteClearsOnlyOptionalAPIKey(t *testing.T) {
 	required.cursor = hubFieldIndex(required.hubFields(), "key")
 	m = Model{modelConfig: required}
 	m.handleModelConfigKey(tea.KeyMsg{Type: tea.KeyDelete})
-	if required.apiKeyAction != host.APIKeyKeep || !strings.Contains(required.message, "不能清除") {
+	if required.apiKeyAction != host.APIKeyKeep || !strings.Contains(required.message, "không thể xóa") {
 		t.Fatalf("必需 Key 不应被清除，action=%q message=%q", required.apiKeyAction, required.message)
 	}
 }
@@ -327,7 +320,7 @@ func TestProviderHubShowsConfigPathAndConnectionAction(t *testing.T) {
 		t.Fatalf("测试连接应优先当前模型，fields=%#v", fields)
 	}
 	view := renderModelConfigModal(120, state)
-	for _, want := range []string{"高级配置", "extra_body"} {
+	for _, want := range []string{"Cấu hình nâng cao", "extra_body"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("配置 Hub 缺少 %q:\n%s", want, view)
 		}
@@ -365,13 +358,13 @@ func TestConnectionTestCanBeCancelled(t *testing.T) {
 		testCancel: func() { cancelled = true }}
 	m := Model{modelConfig: state}
 	m.handleModelConfigKey(tea.KeyMsg{Type: tea.KeyEsc})
-	if !cancelled || !state.testing || state.message != "正在取消连接测试..." {
+	if !cancelled || !state.testing || state.message != "Đang hủy kiểm tra kết nối..." {
 		t.Fatalf("Esc 应取消在途测试并等待结果，cancelled=%v testing=%v message=%q", cancelled, state.testing, state.message)
 	}
 
 	updated, _, handled := m.handleRuntimeMsg(modelConfigConnectionMsg{err: context.Canceled})
 	m = updated.(Model)
-	if !handled || m.modelConfig.testing || m.modelConfig.message != "连接测试已取消" {
+	if !handled || m.modelConfig.testing || m.modelConfig.message != "Đã hủy kiểm tra kết nối" {
 		t.Fatalf("取消结果未正确收敛: handled=%v testing=%v message=%q", handled, m.modelConfig.testing, m.modelConfig.message)
 	}
 }
@@ -492,7 +485,8 @@ func TestGeneralSettingsLandingShowsStyleBudgetNotify(t *testing.T) {
 }
 
 func TestGeneralBudgetInputValidation(t *testing.T) {
-	state := &modelConfigState{editSetting: "book_usd", input: "25.5"}
+	state := &modelConfigState{editSetting: "book_usd"}
+	state.startTextInput("25.5", "", false)
 	if err := state.applyBudgetInput(); err != nil {
 		t.Fatalf("book_usd input failed: %v", err)
 	}
@@ -500,7 +494,7 @@ func TestGeneralBudgetInputValidation(t *testing.T) {
 		t.Fatalf("budget = %#v, want book_usd 25.5 and default warn 0.8", state.generalBudget)
 	}
 	state.editSetting = "warn_ratio"
-	state.input = "1.2"
+	state.input.SetValue("1.2")
 	if err := state.applyBudgetInput(); err == nil {
 		t.Fatal("warn_ratio >= 1 should fail when budget is enabled")
 	}

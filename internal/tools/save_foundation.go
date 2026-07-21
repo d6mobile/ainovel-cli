@@ -72,7 +72,11 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 
 	result := map[string]any{"saved": true, "type": a.Type, "scale": a.Scale}
 
-	if (a.Type == "outline" || a.Type == "layered_outline") && t.isWriting() {
+	writing, err := t.isWriting()
+	if err != nil {
+		return nil, fmt.Errorf("tải progress: %w: %w", errs.ErrStoreRead, err)
+	}
+	if (a.Type == "outline" || a.Type == "layered_outline") && writing {
 		return nil, fmt.Errorf(
 			"Trong giai đoạn viết, không được dùng %s để ghi đè toàn bộ dàn ý. Hãy dùng expand_arc để mở rộng cung mẫu, hoặc append_volume để thêm cuốn mới: %w", a.Type, errs.ErrToolPrecondition)
 	}
@@ -313,7 +317,10 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		t.recordVolumeEndDecision(a.Type, a.Reason, volumeEndFacts, result)
 	}
 
-	remaining := t.store.FoundationMissing()
+	remaining, err := t.store.FoundationMissing()
+	if err != nil {
+		return nil, fmt.Errorf("tải trạng thái foundation: %w: %w", errs.ErrStoreRead, err)
+	}
 	ready := len(remaining) == 0
 	result["remaining"] = remaining
 	result["foundation_ready"] = ready

@@ -16,6 +16,7 @@ type reportState struct {
 	reqID      int
 	report     *diag.Report
 	exportPath string // đường dẫn file chẩn đoán đã ẩn danh, hiển thị trên đầu báo cáo để dán vào issue
+	exportErr  error
 	loading    bool
 	renderW    int
 	startedAt  time.Time

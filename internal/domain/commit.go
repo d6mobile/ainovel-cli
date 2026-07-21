@@ -1,5 +1,9 @@
 package domain
 
+import (
+	"encoding/json"
+)
+
 // CommitStage biểu thị giai đoạn hiện tại của Saga lưu chương.
 type CommitStage string
 

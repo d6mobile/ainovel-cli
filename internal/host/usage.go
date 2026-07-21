@@ -23,9 +23,6 @@ const (
 	cacheBreakMinDropTokens = 2000
 )
 
-//
-//
-//
 type UsageTracker struct {
 	mu       sync.Mutex
 	overall  agentTotals
@@ -39,7 +36,9 @@ type UsageTracker struct {
 	missingAssistantUsage int
 	loggedMissingUsage    bool
 
-	saveCh chan struct{}
+	saveCh       chan struct{}
+	autoSaveMu   sync.Mutex
+	autoSaveDone chan struct{}
 
 	onCost func(total float64)
 
@@ -82,7 +81,6 @@ func NewUsageTracker(set *bootstrap.ModelSet, store *storepkg.Store) *UsageTrack
 	}
 }
 
-//
 func (t *UsageTracker) Record(agentName, task string, msg agentcore.AgentMessage) {
 	if t == nil {
 		return
@@ -103,7 +101,6 @@ func (t *UsageTracker) Record(agentName, task string, msg agentcore.AgentMessage
 	t.accumulate(role, provider, modelName, *m.Usage)
 }
 
-//
 func (t *UsageTracker) noteCacheBreak(role, task string, u agentcore.Usage) {
 	now := time.Now()
 	prefix := u.Input
@@ -260,7 +257,6 @@ func modelUsageKey(provider, modelName string) string {
 	}
 }
 
-//
 func addUsage(t *agentTotals, u agentcore.Usage, cost, saved float64, capable bool) {
 	t.Input += u.Input
 	t.Output += u.Output
@@ -347,7 +343,6 @@ func (t *UsageTracker) MissingAssistantUsage() int {
 	return t.missingAssistantUsage
 }
 
-
 func (t *UsageTracker) Snapshot() domain.UsageState {
 	if t == nil {
 		return domain.UsageState{}
@@ -421,7 +416,6 @@ func (t *UsageTracker) WaitAutoSave() {
 	}
 }
 
-//
 func (t *UsageTracker) autoSaveLoop(ctx context.Context) {
 	const debounce = 500 * time.Millisecond
 	timer := time.NewTimer(time.Hour)
@@ -594,7 +588,6 @@ func (t *UsageTracker) PerModel() []AgentUsage {
 	return out
 }
 
-//
 func (t *UsageTracker) resolveCost(modelName string, u agentcore.Usage) (cost, saved float64, capable bool) {
 	if entry, ok := models.DefaultRegistry().Resolve(modelName); ok {
 		c := computeCost(u, *entry)
@@ -617,9 +610,6 @@ func agentRoleName(agentName string) string {
 	return agentName
 }
 
-//
-//
-//
 func computeCost(u agentcore.Usage, e models.ModelEntry) float64 {
 	nonCachedInput := u.Input - u.CacheRead
 	if nonCachedInput < 0 {

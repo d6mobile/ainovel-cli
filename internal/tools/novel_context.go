@@ -96,7 +96,7 @@ func (t *ContextTool) Execute(_ context.Context, args json.RawMessage) (json.Raw
 			epi["_usage"] = "Container này là ghi nhớ sự kiện đã viết vào chính văn (để đối chiếu nhất quán và nối tiếp); lặp nguyên văn các nội dung này trong chương mới là lỗi trùng lặp"
 		}
 	} else {
-		t.buildProgressStatus(result)
+		t.buildProgressStatus(result, warn)
 		t.buildArchitectContext(result, warn)
 	}
 
@@ -405,8 +405,11 @@ func (t *ContextTool) architectReferences() map[string]string {
 	return refs
 }
 
-func (t *ContextTool) foundationStatus() map[string]any {
-	missing := t.store.FoundationMissing()
+func (t *ContextTool) foundationStatus() (map[string]any, error) {
+	missing, err := t.store.FoundationMissing()
+	if err != nil {
+		return nil, err
+	}
 	status := map[string]any{"ready": len(missing) == 0}
 	if len(missing) > 0 {
 		status["missing"] = missing

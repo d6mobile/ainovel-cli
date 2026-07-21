@@ -33,6 +33,13 @@ func NewCheckpointStore(io *IO) *CheckpointStore {
 	return cs
 }
 
+// InitError trả về lỗi tải checkpoint ban đầu, nếu có.
+func (cs *CheckpointStore) InitError() error {
+	cs.io.mu.RLock()
+	defer cs.io.mu.RUnlock()
+	return cs.loadErr
+}
+
 // loadFromDisk đọc toàn bộ jsonl từ đĩa vào cache và khôi phục seqGen.
 func (cs *CheckpointStore) loadFromDisk() {
 	cs.io.mu.Lock()
@@ -168,7 +175,7 @@ func (cs *CheckpointStore) Reset() error {
 }
 
 // readCheckpointsFile phân tích jsonl; bỏ qua các dòng sai định dạng để chịu lỗi cắt ngắn ở cuối file.
-func readCheckpointsFile(path string) []domain.Checkpoint {
+func readCheckpointsFile(path string) ([]domain.Checkpoint, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {

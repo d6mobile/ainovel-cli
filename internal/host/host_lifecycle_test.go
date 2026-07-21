@@ -24,13 +24,13 @@ func TestInterventionStopsWhenPersistenceFails(t *testing.T) {
 	}
 	h := &Host{store: st, events: make(chan Event, 4)}
 	err := h.doIntervention("修改主角性格", false)
-	if err == nil || !strings.Contains(err.Error(), "持久化失败") {
+	if err == nil || !strings.Contains(err.Error(), "lưu bền can thiệp thất bại") {
 		t.Fatalf("expected persistence error, got %v", err)
 	}
-	// 公共 Steer 必须等待异步任务并把同一业务错误返回给 TUI；不能只表示 goroutine
-	// 启动成功，否则界面永远收不到真实失败。
+	// Public Steer phải chờ tác vụ async và trả lại cùng lỗi nghiệp vụ cho TUI;
+	// không được chỉ báo goroutine đã khởi động thành công.
 	err = h.Steer("修改主角性格")
-	if err == nil || !strings.Contains(err.Error(), "持久化失败") {
+	if err == nil || !strings.Contains(err.Error(), "lưu bền can thiệp thất bại") {
 		t.Fatalf("Steer should return persistence error, got %v", err)
 	}
 }

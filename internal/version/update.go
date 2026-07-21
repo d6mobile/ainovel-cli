@@ -160,7 +160,7 @@ func selectChecksumAsset(rel *release, binaryName string) (releaseAsset, error) 
 			return asset, nil
 		}
 	}
-	return releaseAsset{}, fmt.Errorf("release %s không tìm thấy gói cài đặt cho nền tảng hiện tại *%s", rel.TagName, suffix)
+	return releaseAsset{}, fmt.Errorf("release %s không tìm thấy gói cài đặt cho nền tảng hiện tại (thiếu checksum)", rel.TagName)
 }
 
 func assetSuffix() (string, error) {
@@ -203,7 +203,8 @@ func download(ctx context.Context, client *http.Client, url, dst string, expecte
 		return fmt.Errorf("tạo tệp nén: %w", err)
 	}
 	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	written, err := io.Copy(f, resp.Body)
+	if err != nil {
 		return fmt.Errorf("ghi tệp nén: %w", err)
 	}
 	if expectedSize > 0 && written != expectedSize {

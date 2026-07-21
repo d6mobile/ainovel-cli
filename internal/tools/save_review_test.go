@@ -98,7 +98,7 @@ func TestSaveReviewRejectsMissingDimensions(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "dimensions phải chứa đúng 7 mục") {
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "dimensions phải chứa ít nhất một đánh giá") {
 		t.Fatalf("expected dimensions validation error, got %v", err)
 	}
 }
@@ -364,7 +364,7 @@ func TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "đặt flow") {
+	if _, err := tool.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "invalid flow transition") {
 		t.Fatalf("expected illegal flow transition error, got %v", err)
 	}
 
@@ -410,7 +410,7 @@ func TestSaveReviewKeepsOutcomeWhenReviewArtifactWriteFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewSaveReviewTool(s).Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "save review") {
+	if _, err := NewSaveReviewTool(s).Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "lưu review") {
 		t.Fatalf("expected review write failure, got %v", err)
 	}
 

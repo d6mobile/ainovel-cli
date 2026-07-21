@@ -128,12 +128,12 @@ func (s *ProgressStore) StartChapter(chapter int) error {
 func (s *ProgressStore) IsChapterCompleted(chapter int) bool {
 	p, err := s.Load()
 	if err != nil {
-		return false, err
+		return false
 	}
 	if p == nil {
-		return false, nil
+		return false
 	}
-	return slices.Contains(p.CompletedChapters, chapter), nil
+	return slices.Contains(p.CompletedChapters, chapter)
 }
 
 func (s *ProgressStore) MarkChapterComplete(chapter, wordCount int, hookType, dominantStrand string) error {
@@ -330,6 +330,48 @@ func (s *ProgressStore) SetPendingRewrites(chapters []int, reason string) error 
 		p.RewriteReason = reason
 		return s.saveUnlocked(p)
 	})
+}
+
+// ApplyReviewOutcome cập nhật flow và hàng đợi làm lại trong cùng một khóa ghi.
+// Kết quả accept/passing không được xóa hàng đợi làm lại đã tồn tại.
+func (s *ProgressStore) ApplyReviewOutcome(flow domain.FlowState, chapters []int, reason string) (*domain.Progress, error) {
+	var latest *domain.Progress
+	err := s.io.WithWriteLock(func() error {
+		p, err := s.loadUnlocked()
+		if err != nil {
+			return err
+		}
+		if p == nil {
+			p = &domain.Progress{}
+		}
+
+		if flow == domain.FlowRewriting || flow == domain.FlowPolishing {
+			normalized, err := normalizePendingRewrites(chapters, p.CompletedChapters)
+			if err != nil {
+				return err
+			}
+			if err := domain.ValidateFlowTransition(p.Flow, flow); err != nil {
+				return err
+			}
+			p.Flow = flow
+			p.PendingRewrites = normalized
+			p.RewriteReason = reason
+		} else if len(p.PendingRewrites) == 0 {
+			if err := domain.ValidateFlowTransition(p.Flow, flow); err != nil {
+				return err
+			}
+			p.Flow = flow
+			p.RewriteReason = ""
+		}
+
+		if err := s.saveUnlocked(p); err != nil {
+			return err
+		}
+		cp := *p
+		latest = &cp
+		return nil
+	})
+	return latest, err
 }
 
 func (s *ProgressStore) ValidatePendingRewrites(chapters []int) error {

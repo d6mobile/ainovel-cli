@@ -59,18 +59,18 @@ func (s *SummaryStore) SaveArcSummary(sum domain.ArcSummary) error {
 func (s *SummaryStore) HasArcSummary(volume, arc int) bool {
 	sum, err := s.LoadArcSummary(volume, arc)
 	if err != nil {
-		return false, err
+		return false
 	}
-	return sum != nil, nil
+	return sum != nil
 }
 
 // HasVolumeSummary kiểm tra tập được chỉ định đã có tóm tắt hay chưa. Nếu đọc thất bại thì coi là "chưa lưu".
 func (s *SummaryStore) HasVolumeSummary(volume int) bool {
 	sum, err := s.LoadVolumeSummary(volume)
 	if err != nil {
-		return false, err
+		return false
 	}
-	return sum != nil, nil
+	return sum != nil
 }
 
 // LoadArcSummary đọc tóm tắt của cung truyện được chỉ định.

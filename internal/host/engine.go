@@ -30,7 +30,7 @@ type engine struct {
 	failurePrompt   string
 	planStartPrompt string
 	style           string
-	reconsult func(text string)
+	reconsult       func(text string)
 
 	observer  *observer
 	budget    *BudgetSentinel
@@ -41,16 +41,16 @@ type engine struct {
 	onPause   func(summary string)
 	onDone    func()
 
-	mu      sync.Mutex
-	wg      sync.WaitGroup
-	cancel  context.CancelFunc
-	running bool
-	pending []controlOp
-	next    *flow.Instruction
+	mu               sync.Mutex
+	wg               sync.WaitGroup
+	cancel           context.CancelFunc
+	running          bool
+	pending          []controlOp
+	next             *flow.Instruction
 	deferGateForNext bool
 
-	lastKey string
-	repeats int
+	lastKey   string
+	repeats   int
 	failedKey string
 }
 
@@ -165,7 +165,7 @@ func (e *engine) run(ctx context.Context) {
 		if inst == nil {
 			state, err := flow.LoadState(e.store)
 			if err != nil {
-				e.pauseWithNotify(notify.KindWorkerFailure, "路由事实读取失败，已暂停: "+err.Error())
+				e.pauseWithNotify(notify.KindWorkerFailure, "Đọc dữ kiện định tuyến thất bại, đã tạm dừng: "+err.Error())
 				return
 			}
 			inst = flow.Route(state)
@@ -174,7 +174,7 @@ func (e *engine) run(ctx context.Context) {
 			var err error
 			inst, err = e.planStartFallback(ctx)
 			if err != nil {
-				e.pauseWithNotify(notify.KindPlanStart, "规划恢复事实读取失败，已暂停: "+err.Error())
+				e.pauseWithNotify(notify.KindPlanStart, "Đọc dữ kiện khôi phục lập kế hoạch thất bại, đã tạm dừng: "+err.Error())
 				return
 			}
 		}
@@ -250,10 +250,10 @@ func (e *engine) currentBudget() *BudgetSentinel {
 	return e.budget
 }
 
-func (e *engine) planStartFallback(ctx context.Context) *flow.Instruction {
+func (e *engine) planStartFallback(ctx context.Context) (*flow.Instruction, error) {
 	progress, err := e.store.Progress.Load()
 	if err != nil {
-		return nil, fmt.Errorf("load progress: %w", err)
+		return nil, fmt.Errorf("tải progress: %w", err)
 	}
 	if progress == nil {
 		return nil, nil
@@ -263,14 +263,14 @@ func (e *engine) planStartFallback(ctx context.Context) *flow.Instruction {
 	}
 	meta, err := e.store.RunMeta.Load()
 	if err != nil {
-		return nil, fmt.Errorf("load run meta: %w", err)
+		return nil, fmt.Errorf("tải run meta: %w", err)
 	}
 	if meta == nil || meta.PlanningTier != "" {
 		return nil, nil
 	}
 	missing, err := e.store.FoundationMissing()
 	if err != nil {
-		return nil, fmt.Errorf("load foundation state: %w", err)
+		return nil, fmt.Errorf("tải trạng thái foundation: %w", err)
 	}
 	if len(missing) == 0 {
 		return nil, nil
@@ -321,11 +321,14 @@ func (e *engine) retryPlanStart(ctx context.Context, prompt string) *flow.Instru
 	return &flow.Instruction{Agent: decision.Planner, Task: decision.Task, Reason: decision.Reason}
 }
 
-func (e *engine) precheck(inst *flow.Instruction) *flow.Instruction {
-	progress, _ := e.store.Progress.Load()
+func (e *engine) precheck(inst *flow.Instruction) (*flow.Instruction, error) {
+	progress, err := e.store.Progress.Load()
+	if err != nil {
+		return nil, fmt.Errorf("tải progress: %w", err)
+	}
 	if progress != nil && progress.Phase == domain.PhaseComplete {
-		slog.Warn("完本期派发被丢弃", "module", "engine", "agent", inst.Agent)
-		return &flow.Instruction{}
+		slog.Warn("Bỏ qua lệnh phái khi sách đã hoàn tất", "module", "engine", "agent", inst.Agent)
+		return &flow.Instruction{}, nil
 	}
 	if inst.Agent == "writer" {
 		if progress == nil || progress.Phase != domain.PhaseWriting {
@@ -333,7 +336,7 @@ func (e *engine) precheck(inst *flow.Instruction) *flow.Instruction {
 			if progress != nil {
 				phase = string(progress.Phase)
 			}
-			return nil, fmt.Errorf("writer 仅能在 writing 阶段派发（当前 phase=%s）: %w", phase, errInvalidWriteTarget)
+			return nil, fmt.Errorf("writer chỉ được phái trong giai đoạn writing (phase hiện tại=%s): %w", phase, errInvalidWriteTarget)
 		}
 		ch, err := writerTargetChapter(e.store)
 		if err != nil {
@@ -341,10 +344,13 @@ func (e *engine) precheck(inst *flow.Instruction) *flow.Instruction {
 		}
 		if ch > 0 {
 			if err := tools.EnsureChapterExpanded(e.store, ch); err != nil {
+				if !errors.Is(err, errs.ErrToolPrecondition) {
+					return nil, err
+				}
 				return &flow.Instruction{
 					Agent:  "architect_long",
-					Task:   fmt.Sprintf("下一弧为骨架(%s)。调用 save_foundation(type=expand_arc) 展开下一弧;若当前卷已写完,改用 type=append_volume 追加并展开下一卷。", err),
-					Reason: "写作目标章未展开,先展开再续写",
+					Task:   fmt.Sprintf("Cung tiếp theo vẫn là khung (%s). Hãy gọi save_foundation(type=expand_arc) để mở rộng cung tiếp theo; nếu tập hiện tại đã viết xong, dùng type=append_volume để thêm và mở rộng tập kế tiếp.", err),
+					Reason: "Chương mục tiêu chưa được mở rộng; cần mở rộng trước khi viết tiếp",
 				}, nil
 			}
 		}
@@ -353,13 +359,13 @@ func (e *engine) precheck(inst *flow.Instruction) *flow.Instruction {
 	return nil, nil
 }
 
-func writerTargetChapter(st *storepkg.Store) int {
+func writerTargetChapter(st *storepkg.Store) (int, error) {
 	progress, err := st.Progress.Load()
 	if err != nil {
-		return 0, fmt.Errorf("load progress: %w", err)
+		return 0, fmt.Errorf("tải progress: %w", err)
 	}
 	if progress == nil {
-		return 0, fmt.Errorf("progress 未初始化")
+		return 0, fmt.Errorf("progress chưa được khởi tạo")
 	}
 	if len(progress.PendingRewrites) > 0 {
 		return progress.PendingRewrites[0], nil
@@ -386,7 +392,7 @@ func (e *engine) trackDeadlock(ctx context.Context, inst **flow.Instruction) (st
 		e.pauseWithNotify(notify.KindDeadlock, fmt.Sprintf("僵局熔断: 指令连续 %d 次无进展(%s),已暂停等待人工介入", e.repeats, in.Agent))
 		return true
 	}
-	facts := e.failureFacts("deadlock", in, "")
+	facts := e.failureFacts("deadlock", in, nil)
 	decision, err := runObservedDecision(e.observer, "僵局裁定", func() (arbiter.FailureDecision, error) {
 		return arbiter.DecideFailure(ctx, e.arbiterModel, e.failurePrompt, facts)
 	})
@@ -485,10 +491,23 @@ func isDeterministicWorkerError(err error) bool {
 	return errors.Is(err, subagent.ErrUnknownAgent) || errors.Is(err, errInvalidWriteTarget)
 }
 
-func (e *engine) failureFacts(kind string, inst *flow.Instruction, errMsg string) arbiter.FailureFacts {
-	f := arbiter.FailureFacts{Kind: kind, Agent: inst.Agent, Task: inst.Task, Error: errMsg, Repeats: e.repeats}
-	f.FoundationGap = e.store.FoundationMissing()
-	if p, err := e.store.Progress.Load(); err == nil && p != nil {
+func (e *engine) failureFacts(kind string, inst *flow.Instruction, workerErr error) arbiter.FailureFacts {
+	f := arbiter.FailureFacts{Kind: kind, Agent: inst.Agent, Task: inst.Task, Repeats: e.repeats}
+	if workerErr != nil {
+		f.Error = workerErr.Error()
+		f.ErrorKind = agentcore.ErrorKind(workerErr)
+	}
+	missing, err := e.store.FoundationMissing()
+	if err != nil {
+		f.FactWarnings = append(f.FactWarnings, "Đọc trạng thái foundation thất bại: "+err.Error())
+	} else {
+		f.FoundationGap = missing
+	}
+	p, err := e.store.Progress.Load()
+	if err != nil {
+		f.FactWarnings = append(f.FactWarnings, "Đọc tiến độ sáng tác thất bại: "+err.Error())
+	}
+	if p != nil {
 		f.Phase = string(p.Phase)
 		f.NextChapter = p.NextChapter()
 		f.PendingQueue = p.PendingRewrites
@@ -548,7 +567,10 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 		}
 	}
 	if op.dispatch != nil {
-		fresh := arbiter.CollectInterventionFacts(e.store)
+		fresh, err := arbiter.CollectInterventionFacts(e.store)
+		if err != nil {
+			return fmt.Errorf("làm mới dữ kiện can thiệp: %w", err)
+		}
 		if fresh.Phase != op.facts.Phase || fresh.Flow != op.facts.Flow ||
 			fresh.QueueHead() != op.facts.QueueHead() {
 			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",

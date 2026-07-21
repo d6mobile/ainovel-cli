@@ -8,6 +8,20 @@ import (
 	"github.com/voocel/ainovel-cli/internal/host"
 )
 
+const resetForeground = "\x1b[0m"
+
+func highlightCommandToken(view, input, token string) string {
+	if token == "" || !strings.HasPrefix(input, token) {
+		return view
+	}
+	idx := strings.Index(view, token)
+	if idx < 0 {
+		return view
+	}
+	highlighted := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render(token)
+	return view[:idx] + highlighted + view[idx+len(token):]
+}
+
 // renderInputBox Đầu vào：Đầu vào、、Mức dùng。
 // Đầu vàoĐầu vào，。
 func renderInputBox(inputView, hints string, snap host.UISnapshot, outputDir string, width int) string {

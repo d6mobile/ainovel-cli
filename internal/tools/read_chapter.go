@@ -137,10 +137,6 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 		content, err = t.store.Drafts.LoadDraft(a.Chapter)
 	default: // final
 		content, err = t.store.Drafts.LoadChapterText(a.Chapter)
-		if err == nil && content == "" {
-			slog.Warn("read_chapter đọc bản cuối rỗng, chuyển sang bản nháp", "module", "tool", "chapter", a.Chapter)
-			content, err = t.store.Drafts.LoadDraft(a.Chapter)
-		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read chapter %d: %w", a.Chapter, err)

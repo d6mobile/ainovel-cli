@@ -98,17 +98,17 @@ func TestIsChapterCompleted(t *testing.T) {
 	_ = store.Progress.Init("test", 10)
 	_ = store.Progress.UpdatePhase(domain.PhaseWriting)
 
-	if completed, err := store.Progress.IsChapterCompleted(1); err != nil || completed {
+	if completed := store.Progress.IsChapterCompleted(1); completed {
 		t.Fatal("chapter 1 should not be completed initially")
 	}
 
 	_ = store.Progress.StartChapter(1)
 	_ = store.Progress.MarkChapterComplete(1, 5000, "", "")
 
-	if completed, err := store.Progress.IsChapterCompleted(1); err != nil || !completed {
+	if completed := store.Progress.IsChapterCompleted(1); !completed {
 		t.Fatal("chapter 1 should be completed after MarkChapterComplete")
 	}
-	if completed, err := store.Progress.IsChapterCompleted(2); err != nil || completed {
+	if completed := store.Progress.IsChapterCompleted(2); completed {
 		t.Fatal("chapter 2 should not be completed")
 	}
 }

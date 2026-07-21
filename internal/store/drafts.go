@@ -123,7 +123,7 @@ var dialogueRe = regexp.MustCompile(`"[^"]*"`)
 
 // ExtractDialogue trích xuất các đoạn hội thoại của nhân vật chỉ định từ các chương đã lưu chương.
 // maxCompletedChapter được truyền từ phía gọi để tránh phụ thuộc chéo miền.
-func (s *DraftStore) ExtractDialogue(characterName string, aliases []string, maxSamples, maxCompletedChapter int) []string {
+func (s *DraftStore) ExtractDialogue(characterName string, aliases []string, maxSamples, maxCompletedChapter int) ([]string, error) {
 	if maxSamples <= 0 {
 		maxSamples = 5
 	}
@@ -171,7 +171,7 @@ func (s *DraftStore) ExtractDialogue(characterName string, aliases []string, max
 
 // ExtractStyleAnchors trích xuất các đoạn văn tiêu biểu từ các chương đã lưu chương làm điểm neo phong cách.
 // maxCompletedChapter được truyền từ phía gọi để tránh phụ thuộc chéo miền.
-func (s *DraftStore) ExtractStyleAnchors(maxAnchors, maxCompletedChapter int) []string {
+func (s *DraftStore) ExtractStyleAnchors(maxAnchors, maxCompletedChapter int) ([]string, error) {
 	if maxAnchors <= 0 {
 		maxAnchors = 5
 	}

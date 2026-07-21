@@ -12,6 +12,13 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
+func enterEditWritingPhase(t *testing.T, s *store.Store) {
+	t.Helper()
+	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+		t.Fatalf("UpdatePhase: %v", err)
+	}
+}
+
 // TestEditChapterAppliesEdit đường dẫn bình thường: drafts đã có nội dung, khớp duy nhất, thay thế thành công.
 func TestEditChapterAppliesEdit(t *testing.T) {
 	dir := t.TempDir()

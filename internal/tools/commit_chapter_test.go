@@ -44,6 +44,12 @@ func setupCommitValidationStore(t *testing.T) (string, *store.Store) {
 	if err := s.Progress.Init("test", 3); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
+	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+		t.Fatalf("UpdatePhase: %v", err)
+	}
+	if err := s.Progress.StartChapter(1); err != nil {
+		t.Fatalf("StartChapter: %v", err)
+	}
 	if err := s.Drafts.SaveDraft(1, "Nội dung chương một đủ để lưu."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
@@ -264,6 +270,12 @@ func TestCommitChapterUpdatesCastLedger(t *testing.T) {
 	if err := s.Progress.Init("test", 10); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
+	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+		t.Fatalf("UpdatePhase: %v", err)
+	}
+	if err := s.Progress.StartChapter(1); err != nil {
+		t.Fatalf("StartChapter: %v", err)
+	}
 	if err := s.Characters.Save([]domain.Character{
 		{Name: "林墨", Role: "主角", Tier: "core"},
 		{Name: "李清砚", Role: "导师", Tier: "important"},
@@ -322,6 +334,12 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 	}
 	if err := s.Progress.Init("test", 10); err != nil {
 		t.Fatalf("InitProgress: %v", err)
+	}
+	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+		t.Fatalf("UpdatePhase: %v", err)
+	}
+	if err := s.Progress.StartChapter(1); err != nil {
+		t.Fatalf("StartChapter: %v", err)
 	}
 	if err := s.Drafts.SaveDraft(1, "第一章正文，林墨遇到黑影并突破。"); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
@@ -449,7 +467,7 @@ func TestCommitChapterRecoversProgressMarkedWindowWithExactOutput(t *testing.T) 
 	}
 
 	tool := NewCommitChapterTool(s)
-	got, err := tool.Execute(context.Background(), json.RawMessage(`{"chapter":1}`))
+	got, err := tool.Execute(context.Background(), json.RawMessage(`{"chapter":1,"summary":"khôi phục","characters":["A"],"key_events":["khôi phục"]}`))
 	if err != nil {
 		t.Fatalf("Execute recovery: %v", err)
 	}

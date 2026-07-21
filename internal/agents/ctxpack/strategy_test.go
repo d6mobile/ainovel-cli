@@ -97,7 +97,7 @@ func TestWriterRestoreIncludesOptionalDataWarnings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("辅助数据损坏不应阻止恢复上下文: %v", err)
 	}
-	if !ok || !strings.Contains(text, "数据告警") || !strings.Contains(text, "style_rules") {
+	if !ok || !strings.Contains(text, "Lỗi dữ liệu") || !strings.Contains(text, "style_rules") {
 		t.Fatalf("恢复上下文应向模型暴露读取告警: %q", text)
 	}
 }

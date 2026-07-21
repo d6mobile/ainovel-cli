@@ -581,7 +581,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		m.modelConfig.testing = false
 		m.modelConfig.testCancel = nil
 		if errors.Is(msg.err, context.Canceled) {
-			m.modelConfig.message = "连接测试已取消"
+			m.modelConfig.message = "Đã hủy kiểm tra kết nối"
 		} else if msg.err != nil {
 			m.modelConfig.message = msg.err.Error()
 		} else {

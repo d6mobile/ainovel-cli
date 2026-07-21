@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"fmt"
+	"log/slog"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/voocel/ainovel-cli/assets"
@@ -35,6 +38,13 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, version string) error {
 	imeSync := newIMECursorSync()
 	m := NewModel(rt, bridge, version)
 	m.imeSync = imeSync
+	if logWarning != nil {
+		m.err = logWarning
+		m.applyEvent(host.Event{
+			Time: time.Now(), Category: "SYSTEM", Level: "warn",
+			Summary: logWarning.Error(), Detail: logWarning.Error(),
+		})
+	}
 	// Không bật báo cáo chuột toàn cục khi khởi động: trang chào mừng không cần chuột,
 	// tắt báo cáo giúp giữ nguyên tính năng kéo-chọn-sao-chép gốc của terminal.
 	// Khi vào bàn làm việc sáng tác (modeRunning), enterRunning sẽ bật báo cáo,

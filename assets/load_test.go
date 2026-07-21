@@ -67,14 +67,14 @@ func TestLoad_NoOverrides(t *testing.T) {
 
 func TestInterventionPromptsKeepScopeContract(t *testing.T) {
 	prompts := loadPrompts()
-	for _, phrase := range []string{"上下文不等于修改授权", "最小充分范围", "分析范围不等于修改范围"} {
+	for _, phrase := range []string{"ngữ cảnh không đồng nghĩa với ủy quyền sửa đổi", "phạm vi đầy đủ tối thiểu", "phạm vi phân tích không đồng nghĩa với phạm vi sửa đổi"} {
 		if !strings.Contains(prompts.ArbiterIntervention, phrase) {
-			t.Fatalf("Arbiter 干预提示缺少范围契约 %q", phrase)
+			t.Fatalf("Arbiter intervention prompt missing scope contract %q", phrase)
 		}
 	}
-	for _, phrase := range []string{"用户原始干预", "分析范围不等于修改范围", "最小充分章节集合"} {
+	for _, phrase := range []string{"can thiệp gốc của người dùng", "phạm vi phân tích không đồng nghĩa với phạm vi sửa đổi", "tập hợp các chương tối thiểu đủ"} {
 		if !strings.Contains(prompts.Editor, phrase) {
-			t.Fatalf("Editor 提示缺少范围契约 %q", phrase)
+			t.Fatalf("Editor prompt missing scope contract %q", phrase)
 		}
 	}
 }

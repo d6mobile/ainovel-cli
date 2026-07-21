@@ -368,7 +368,13 @@ func (h *Host) refuseNewBookOverExisting() error {
 }
 
 func (h *Host) startEngine(initial *flow.Instruction) bool {
-	if active, done := imp.ResumeStatus(h.store); active && !done {
+	active, done, importErr := imp.ResumeStatus(h.store)
+	if importErr != nil {
+		h.emitEvent(Event{Time: time.Now(), Category: "ERROR", Level: "error",
+			Summary: "Đọc trạng thái nhập truyện thất bại, đã chặn sáng tác thường để tránh ghi đè artifact hiện có: " + importErr.Error()})
+		return false
+	}
+	if active && !done {
 		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",
 			Summary: "Có bản nhập truyện bên ngoài chưa hoàn tất, hãy chạy /import để khôi phục xong rồi tiếp tục sáng tác"})
 		return false
@@ -477,12 +483,15 @@ func (h *Host) handleIntervention(text string) {
 	h.doIntervention(text, false)
 }
 
-func (h *Host) doIntervention(text string, restart bool) {
+func (h *Host) doIntervention(text string, restart bool) error {
 	h.interMu.Lock()
 	defer h.interMu.Unlock()
 
 	if err := h.store.RunMeta.SetPendingSteer(text); err != nil {
-		slog.Warn("Lưu bền can thiệp thất bại (vẫn tiếp tục phán quyết, nhưng mất bảo vệ khi sập)", "module", "host", "err", err)
+		wrapped := fmt.Errorf("lưu bền can thiệp thất bại, đã dừng phán quyết: %w", err)
+		h.emitEvent(Event{Time: time.Now(), Category: "ERROR", Agent: "arbiter",
+			Summary: wrapped.Error(), Detail: wrapped.Error(), Level: "error"})
+		return wrapped
 	}
 	clearPending := func() error {
 		if err := h.store.ClearHandledSteer(); err != nil {
@@ -553,7 +562,7 @@ func (h *Host) doIntervention(text string, restart bool) {
 			if err := h.engine.applyControlOp(context.Background(), op); err != nil {
 				h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",
 					Summary: "Thực thi hành động can thiệp thất bại, đã giữ lại; sẽ tự thử lại khi khôi phục/tiếp tục"})
-				return
+				return nil
 			}
 			if decision.Reopen != nil || decision.Dispatch != nil {
 				restart = true
@@ -563,7 +572,7 @@ func (h *Host) doIntervention(text string, restart bool) {
 	if actionsFailed {
 		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",
 			Summary: "Một số hành động can thiệp chưa thành công, can thiệp đã được giữ lại; sẽ tự thử lại khi khôi phục/tiếp tục"})
-		return
+		return nil
 	}
 	clearPending()
 
@@ -703,9 +712,15 @@ func (h *Host) AdvanceOneChapter() error {
 	return nil
 }
 
-func (h *Host) Steer(text string) {
-	h.emitEvent(Event{Time: time.Now(), Category: "USER", Summary: "[Can thiệp người dùng] " + text, Level: "info"})
-	go h.handleIntervention(text)
+func (h *Host) Steer(text string) error {
+	err, launched := h.runAsync(func() error {
+		h.emitEvent(Event{Time: time.Now(), Category: "USER", Summary: "[Can thiệp người dùng] " + text, Level: "info"})
+		return h.doIntervention(text, false)
+	})
+	if !launched {
+		return fmt.Errorf("Host đang đóng, không thể gửi can thiệp")
+	}
+	return err
 }
 
 func (h *Host) Abort() bool {
@@ -1527,6 +1542,29 @@ func (h *Host) releaseExclusive() {
 	if cancel != nil {
 		cancel()
 	}
+}
+
+func (h *Host) launchAsync(fn func()) bool {
+	h.mu.Lock()
+	if h.closing {
+		h.mu.Unlock()
+		return false
+	}
+	h.asyncWG.Add(1)
+	h.mu.Unlock()
+	go func() {
+		defer h.asyncWG.Done()
+		fn()
+	}()
+	return true
+}
+
+func (h *Host) runAsync(fn func() error) (error, bool) {
+	result := make(chan error, 1)
+	if !h.launchAsync(func() { result <- fn() }) {
+		return nil, false
+	}
+	return <-result, true
 }
 
 func superviseExclusive[T any](h *Host, src <-chan T) <-chan T {

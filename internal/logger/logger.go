@@ -40,14 +40,9 @@ func FileLogger(outputDir, filename string) (*slog.Logger, func(), error) {
 
 // SetupFile khởi tạo log ra file, trả về hàm dọn dẹp.
 // Khi alsoStderr=true thì đồng thời xuất ra stderr.
-func SetupFile(outputDir, filename string, alsoStderr bool) func() {
-	logPath := filepath.Join(outputDir, "logs", filename)
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
-		Setup(io.Discard, slog.LevelInfo)
-		return func() {}
-	}
-
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+// Khi không thể tạo/mở file log sẽ trả về lỗi, caller cần xử lý rõ ràng.
+func SetupFile(outputDir, filename string, alsoStderr bool) (func(), error) {
+	f, err := openLogFile(outputDir, filename)
 	if err != nil {
 		return nil, err
 	}

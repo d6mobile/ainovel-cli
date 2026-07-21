@@ -96,6 +96,13 @@ func (t *SaveReviewTool) Execute(_ context.Context, args json.RawMessage) (json.
 		}
 	}
 
+	flow := domain.FlowWriting
+	if finalVerdict == "rewrite" {
+		flow = domain.FlowRewriting
+	} else if finalVerdict == "polish" {
+		flow = domain.FlowPolishing
+	}
+
 	affected := r.AffectedChapters
 	if finalVerdict == "rewrite" || finalVerdict == "polish" {
 		if len(affected) == 0 && r.Chapter > 0 {
@@ -106,32 +113,15 @@ func (t *SaveReviewTool) Execute(_ context.Context, args json.RawMessage) (json.
 		}
 	}
 
-	// 先原子应用控制状态，再保存审阅工件。若第二步失败，返工意图仍然存在；
-	// Writer 排空队列后，路由会因审阅工件缺失而重新派发 Editor，不会跳过审阅。
-	latest, err := t.store.Progress.ApplyReviewOutcome(flow, affected, r.Summary)
+	// Áp dụng trạng thái điều khiển theo cách nguyên tử rồi mới lưu artifact review.
+	// Nếu bước lưu artifact lỗi, ý định làm lại vẫn còn; sau khi writer xả hàng đợi,
+	// router sẽ phái Editor lại vì thiếu artifact review, nên không bỏ qua review.
+	progress, err := t.store.Progress.ApplyReviewOutcome(flow, affected, r.Summary)
 	if err != nil {
 		return nil, fmt.Errorf("apply review outcome: %w", err)
 	}
 	if err := t.store.World.SaveReview(r); err != nil {
 		return nil, fmt.Errorf("lưu review: %w", err)
-	}
-
-	progress, _ := t.store.Progress.Load()
-	if finalVerdict == "rewrite" || finalVerdict == "polish" {
-		flow := domain.FlowRewriting
-		if finalVerdict == "polish" {
-			flow = domain.FlowPolishing
-		}
-		if err := t.store.Progress.SetFlow(flow); err != nil {
-			return nil, fmt.Errorf("đặt flow %s: %w", flow, err)
-		}
-		if err := t.store.Progress.SetPendingRewrites(affected, r.Summary); err != nil {
-			return nil, fmt.Errorf("đặt pending rewrites: %w", err)
-		}
-	} else {
-		if err := t.store.Progress.SetFlow(domain.FlowWriting); err != nil {
-			return nil, fmt.Errorf("đặt flow writing: %w", err)
-		}
 	}
 
 	latest, _ := t.store.Progress.Load()
@@ -158,16 +148,21 @@ func (t *SaveReviewTool) Execute(_ context.Context, args json.RawMessage) (json.
 		return nil, fmt.Errorf("ghi checkpoint review: %w", err)
 	}
 
-	return json.Marshal(map[string]any{
+	result := map[string]any{
 		"saved":             true,
 		"chapter":           r.Chapter,
 		"scope":             r.Scope,
 		"verdict":           r.Verdict,
+		"final_verdict":     finalVerdict,
 		"affected_chapters": affected,
 		"issues":            len(r.Issues),
 		"next_flow":         nextFlow,
 		"next_chapter":      nextChapter,
-	})
+	}
+	if escalationReason != "" {
+		result["escalation_reason"] = escalationReason
+	}
+	return json.Marshal(result)
 }
 
 func validateReviewEntry(r domain.ReviewEntry) error {
@@ -210,17 +205,18 @@ func reviewFlow(verdict string) (domain.FlowState, error) {
 }
 
 func validateDimensions(dimensions []domain.DimensionScore) error {
-	if len(dimensions) != len(expectedReviewDimensions) {
-		return fmt.Errorf("dimensions phải chứa đúng %d mục", len(expectedReviewDimensions))
+	if len(dimensions) == 0 {
+		return fmt.Errorf("dimensions phải chứa ít nhất một đánh giá có bằng chứng")
 	}
 
 	seen := make(map[string]struct{}, len(dimensions))
 	for _, dim := range dimensions {
-		if _, ok := expectedReviewDimensions[dim.Dimension]; !ok {
-			return fmt.Errorf("chiều không hợp lệ: %s", dim.Dimension)
+		name := strings.TrimSpace(dim.Dimension)
+		if name == "" {
+			return fmt.Errorf("tên chiều đánh giá là bắt buộc")
 		}
-		if _, ok := seen[dim.Dimension]; ok {
-			return fmt.Errorf("chiều bị trùng: %s", dim.Dimension)
+		if _, ok := seen[name]; ok {
+			return fmt.Errorf("chiều bị trùng: %s", name)
 		}
 		seen[name] = struct{}{}
 		if dim.Score < 0 || dim.Score > 100 {

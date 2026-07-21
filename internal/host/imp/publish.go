@@ -153,10 +153,7 @@ func jsonEqual(a, b any) bool {
 
 // publishChapter 复用 commit_chapter 发布单章；已完成章节由其幂等检查跳过（RFC §12.3）。
 func publishChapter(ctx context.Context, st *store.Store, commit ChapterCommitter, chapter int, content string, f ImportedChapterFacts) error {
-	completed, err := st.Progress.IsChapterCompleted(chapter)
-	if err != nil {
-		return fmt.Errorf("load progress ch%d：%w", chapter, err)
-	}
+	completed := st.Progress.IsChapterCompleted(chapter)
 	if completed {
 		// 崩溃可能落在 MarkChapterComplete 与 ClearPendingCommit 之间：pending_commit 残留
 		// 指向本章。直接跳过会绕开 commit 工具专为此窗口准备的清理分支（补 checkpoint+清残留），

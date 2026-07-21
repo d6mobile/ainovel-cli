@@ -160,7 +160,7 @@ func (s *Store) FoundationMissing() ([]string, error) {
 // Init 创建所需的子目录结构。
 func (s *Store) Init() error {
 	if err := s.Checkpoints.InitError(); err != nil {
-		return fmt.Errorf("load checkpoints: %w", err)
+		return fmt.Errorf("tải checkpoints: %w", err)
 	}
 	return s.Progress.io.EnsureDirs([]string{
 		"chapters", "summaries", "drafts", "reviews", "meta", "meta/runtime", "meta/runtime/tasks", "meta/sessions", "meta/sessions/agents",
