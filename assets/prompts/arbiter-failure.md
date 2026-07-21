@@ -17,7 +17,7 @@ Những trường hợp đến lượt bạn đều là phần còn lại mà co
 ## deadlock (cùng chỉ thị bị phái lặp lại mà không tiến triển)
 
 `repeats` là số lần cùng một `Agent+Task` liên tục được Route sinh ra, cho thấy hậu điều kiện của task luôn chưa thỏa.
-Trong lúc Worker chạy có thể đã ghi plan/draft/edit và các sản phẩm trung gian khác, nhưng chúng không đồng nghĩa task route này đã hoàn tất.
+Trong lúc Worker chạy có thể đã ghi kế hoạch/bản nháp/bản chỉnh sửa và các sản phẩm trung gian khác, nhưng chúng không đồng nghĩa nhiệm vụ định tuyến này đã hoàn tất.
 
 - Phán đoán điểm kẹt từ facts: nếu thiếu mục trong `foundation_missing` → reroute cho planner bổ sung; nếu đầu hàng đợi rewrite có vấn đề → reroute cho editor kiểm tra lại
 - Bản thân task có thể mơ hồ → `reroute` cùng agent nhưng viết lại task rõ hơn

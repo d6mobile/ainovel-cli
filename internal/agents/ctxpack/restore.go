@@ -150,7 +150,7 @@ func (p *WriterRestorePack) Clear() {
 }
 
 // Hook returns a PostSummaryHook that injects the cached restore pack.
-// The hook performs no I/O — it only reads the in-memory pack under a read lock.
+// the hook performs no I/O — it only reads the in-memory pack under a read lock.
 func (p *WriterRestorePack) Hook() corecontext.PostSummaryHook {
 	return func(_ context.Context, _ corecontext.SummaryInfo, _ []agentcore.AgentMessage) ([]agentcore.AgentMessage, error) {
 		msg, ok := p.buildMessage(restoreBudgetTokens)

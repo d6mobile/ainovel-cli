@@ -105,9 +105,9 @@ func (m Model) handleBlockingModalKey(msg tea.KeyMsg, next func(tea.KeyMsg) (tea
 }
 
 // toggleMouseReporting toggles mouse reporting. Off -> on lets the user copy with native drag selection;
-// on -> off restores click-to-focus / wheel behavior. The base path and blocking-modal path share this code.
+// on -> off restores click-to-focus / wheel behavior. the base path and blocking-modal path share this code.
 func (m Model) toggleMouseReporting() (Model, tea.Cmd) {
-	// The welcome page (modeNew) already keeps mouse reporting off, so native drag selection can copy; ignore Ctrl+R here,
+	// the welcome page (modeNew) already keeps mouse reporting off, so native drag selection can copy; ignore Ctrl+R here,
 	// to avoid accidentally enabling reporting and breaking native copy. Mouse reporting is enabled by enterRunning when entering the workbench.
 	if m.mode == modeNew {
 		return m, nil
@@ -123,7 +123,7 @@ func (m Model) toggleMouseReporting() (Model, tea.Cmd) {
 const donePlaceholder = "Sáng tác đã hoàn thành · Có thể nhập yêu cầu làm lại (ví dụ \"viết lại chương 3\"), /reopen viết tiếp quyển mới, /export xuất"
 
 // enterRunning enters the creative workbench: it enables mouse reporting (the workbench needs click-to-switch panels / wheel scrolling /
-// dragging the sidebar). The caller must Batch the returned command into the final result.
+// dragging the sidebar). the caller must Batch the returned command into the final result.
 func (m *Model) enterRunning() tea.Cmd {
 	m.mode = modeRunning
 	m.mouseOff = false
@@ -373,7 +373,7 @@ func (m Model) handleVerticalScrollKey(msg tea.KeyMsg, upward bool) (tea.Model, 
 func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.cocreate != nil {
 		// Route mouse events by X coordinate: the left half of the screen is the conv panel, the right half is the prompt panel.
-		// The modal is centered and conv takes about 58% of the left side, so using the screen midpoint is accurate enough.
+		// the modal is centered and conv takes about 58% of the left side, so using the screen midpoint is accurate enough.
 		// Scrolling the wheel in the conv area automatically stops follow so the user can keep the view stable on a specific history position.
 		var cmd tea.Cmd
 		if msg.X < m.width/2 {
@@ -479,7 +479,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		if msg.complete {
 			m.abortPending = false
 			m.mode = modeDone
-			// The done state does not lock the input box: automatic continuation stops, but the user can still enter rewrite requests (modeDone input is
+			// the done state does not lock the input box: automatic continuation stops, but the user can still enter rewrite requests (modeDone input is
 			// handled by Continue to wake a new run; Arbiter decides between rewrite or continued creation; /export and /model
 			// commands also need to remain available, so the input box must stay focused (issues #27 and #38).
 			m.textarea.Placeholder = donePlaceholder
@@ -851,7 +851,7 @@ func (m *Model) applyRuntimeReplay(items []domain.RuntimeQueueItem) {
 	for _, item := range items {
 		switch item.Kind {
 		case domain.RuntimeQueueUIEvent:
-			// The event stream is not replayed: the queue only contains done-state events, and Agent/Depth/Duration/Level
+			// the event stream is not replayed: the queue only contains done-state events, and Agent/Depth/Duration/Level
 			// fields needed for rendering are not restored by replay, so the resulting rows are incomplete. Empty is better than half-baked data.
 			continue
 		case domain.RuntimeQueueStreamClear:
