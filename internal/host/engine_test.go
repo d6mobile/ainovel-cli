@@ -10,6 +10,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,6 +24,7 @@ import (
 	"github.com/voocel/agentcore/subagent"
 	"github.com/voocel/ainovel-cli/internal/arbiter"
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/flow"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 	"github.com/voocel/ainovel-cli/internal/tools"
 )
@@ -29,6 +32,46 @@ import (
 // scriptedChatModel 按回调产出响应的最小 ChatModel。
 type scriptedChatModel struct {
 	fn func(msgs []agentcore.Message) agentcore.Message
+}
+
+func TestFailureFactsKeepPartialStateAndWarnings(t *testing.T) {
+	dir := t.TempDir()
+	st := storepkg.NewStore(dir)
+	if err := st.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Progress.Init("test", 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "premise.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	e := &engine{store: st}
+	workerErr := fmt.Errorf("writer exhausted: %w", agentcore.ErrMaxTurns)
+	facts := e.failureFacts("worker_failure", &flow.Instruction{Agent: "writer", Task: "续写"}, workerErr)
+	if facts.ErrorKind != "max_turns" || facts.Phase != string(domain.PhaseInit) {
+		t.Fatalf("应保留错误类型和可读取的进度事实: %+v", facts)
+	}
+	if len(facts.FactWarnings) == 0 {
+		t.Fatalf("不可读的基础事实必须作为告警交给 Arbiter: %+v", facts)
+	}
+}
+
+func TestInterventionDispatchTaskPreservesOriginalAuthority(t *testing.T) {
+	const task = "检查重复内容并安排必要返工"
+	const original = "  后续不要重复解释能力来源；不要改动无关内容。\n"
+
+	got := interventionDispatchTask(task, original)
+	if !strings.Contains(got, task) {
+		t.Fatalf("派单任务丢失: %q", got)
+	}
+	if !strings.Contains(got, original) {
+		t.Fatalf("用户原始干预未被逐字保留: %q", got)
+	}
+	if !strings.Contains(got, "修改授权的唯一来源") {
+		t.Fatalf("缺少授权边界说明: %q", got)
+	}
 }
 
 func (m *scriptedChatModel) Generate(_ context.Context, msgs []agentcore.Message, _ []agentcore.ToolSpec, _ ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
@@ -187,6 +230,15 @@ func waitEngineDone(t *testing.T, done chan struct{}) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("引擎未在期限内停机")
 	}
+}
+
+func mustInterventionFacts(t *testing.T, st *storepkg.Store) arbiter.InterventionFacts {
+	t.Helper()
+	facts, err := arbiter.CollectInterventionFacts(st)
+	if err != nil {
+		t.Fatalf("CollectInterventionFacts: %v", err)
+	}
+	return facts
 }
 
 func TestEngine_ReviewPermitWritesExactlyOneNewChapter(t *testing.T) {
@@ -732,7 +784,7 @@ func TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue(t *testing.T) {
 	e.applyControlOp(context.Background(), controlOp{
 		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "重写第1章语气,改完暂停验收"},
 		dispatch: &arbiter.DispatchOp{Agent: "editor", Task: "复核第 1 章:语气改冷,save_review(verdict=rewrite, affected_chapters=[1])"},
-		facts:    arbiter.CollectInterventionFacts(st),
+		facts:    mustInterventionFacts(t, st),
 	})
 	if !e.start(nil) {
 		t.Fatal("engine start")
@@ -801,7 +853,7 @@ func TestEngine_BoundaryHoldDoesNotDispatchAnotherWorker(t *testing.T) {
 	// 第 1 章写作期间到达 hold-only 干预（与真实 Steer 时序一致）。
 	e.enqueue(controlOp{
 		hold:  &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, Reason: "先停一下我看看"},
-		facts: arbiter.CollectInterventionFacts(st),
+		facts: mustInterventionFacts(t, st),
 	})
 	waitEngineDone(t, done)
 
@@ -854,7 +906,7 @@ func TestEngine_ExitRaceRestoresPendingDispatch(t *testing.T) {
 		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "验收"},
 		dispatch: &arbiter.DispatchOp{Agent: "writer", Task: "重写第 1 章"},
 		text:     "重写第1章然后停下来",
-		facts:    arbiter.CollectInterventionFacts(st),
+		facts:    mustInterventionFacts(t, st),
 	})
 	e.abort()
 	waitEngineDone(t, done)

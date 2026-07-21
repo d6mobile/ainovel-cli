@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -504,7 +506,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		boxW, _ := reportModalSize(m.width, m.height)
-		m.report.load(msg.report, paddedModalContentWidth(boxW), msg.exportPath, msg.finishedAt)
+		m.report.load(msg.report, paddedModalContentWidth(boxW), msg.exportPath, msg.exportErr, msg.finishedAt)
 		return m, nil, true
 	case importEventMsg:
 		if m.importer == nil || msg.reqID != m.importer.reqID {
@@ -572,6 +574,20 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		m.modelConfig = nil
 		return m, tea.Batch(fetchSnapshot(m.runtime), m.textarea.Focus()), true
+	case modelConfigConnectionMsg:
+		if m.modelConfig == nil {
+			return m, nil, true
+		}
+		m.modelConfig.testing = false
+		m.modelConfig.testCancel = nil
+		if errors.Is(msg.err, context.Canceled) {
+			m.modelConfig.message = "连接测试已取消"
+		} else if msg.err != nil {
+			m.modelConfig.message = msg.err.Error()
+		} else {
+			m.modelConfig.message = "连接测试成功：" + msg.model
+		}
+		return m, nil, true
 	case startResultMsg:
 		next, cmd := m.handleStartResultMsg(msg)
 		return next, cmd, true
@@ -585,6 +601,12 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.handleCoCreateDoneMsg(msg)
 		return next, cmd, true
 	case steerResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: msg.err.Error(), Level: "error"})
+			m.refreshEventViewport()
+			return m, tea.Batch(fetchSnapshot(m.runtime), m.textarea.Focus()), true
+		}
 		return m, tea.Batch(fetchSnapshot(m.runtime), listenDone(m.runtime)), true
 	case continueResultMsg:
 		if msg.err != nil {

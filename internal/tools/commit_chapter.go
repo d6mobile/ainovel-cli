@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/voocel/agentcore/schema"
 	"github.com/voocel/ainovel-cli/internal/domain"
@@ -29,6 +30,23 @@ func NewCommitChapterTool(store *store.Store) *CommitChapterTool {
 type commitOutput struct {
 	domain.CommitResult
 	RuleViolations []rules.Violation `json:"rule_violations,omitempty"`
+}
+
+// commitArgs 是提交 Saga 的规范化结构化载荷。首次执行把它与正文快照一起写入
+// PendingCommit；崩溃恢复一律重放这份冻结意图，忽略新 Worker 生成的参数和草稿。
+type commitArgs struct {
+	Chapter             int                        `json:"chapter"`
+	Summary             string                     `json:"summary"`
+	Characters          []string                   `json:"characters"`
+	KeyEvents           []string                   `json:"key_events"`
+	TimelineEvents      []domain.TimelineEvent     `json:"timeline_events"`
+	ForeshadowUpdates   []domain.ForeshadowUpdate  `json:"foreshadow_updates"`
+	RelationshipChanges []domain.RelationshipEntry `json:"relationship_changes"`
+	StateChanges        []domain.StateChange       `json:"state_changes"`
+	CastIntros          []domain.CastIntro         `json:"cast_intros"`
+	HookType            string                     `json:"hook_type"`
+	DominantStrand      string                     `json:"dominant_strand"`
+	Feedback            *domain.OutlineFeedback    `json:"feedback"`
 }
 
 func (t *CommitChapterTool) Name() string { return "commit_chapter" }
@@ -417,7 +435,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	}
 
 	var boundary *store.ArcBoundary
-	if progress, perr := t.store.Progress.Load(); perr == nil && progress != nil && progress.Layered {
+	if progress.Layered {
 		b, bErr := t.store.Outline.CheckArcBoundary(a.Chapter)
 		if bErr != nil {
 			return nil, fmt.Errorf("Kiểm tra ranh giới cung thất bại chapter=%d: %w: %w", a.Chapter, errs.ErrStoreRead, bErr)
@@ -437,6 +455,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	if content == "" {
 		return nil, fmt.Errorf("không tìm thấy nội dung cho chương %d: %w", a.Chapter, errs.ErrToolPrecondition)
 	}
+	wordCount := utf8.RuneCountInString(content)
 
 	now := time.Now().Format(time.RFC3339)
 	pending := domain.PendingCommit{
@@ -501,7 +520,6 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		if err := t.store.Cast.MergeAppearances(a.Chapter, a.Characters, a.CastIntros, coreNames); err != nil {
 			slog.Warn("Cộng dồn sổ nhân vật phụ thất bại, bỏ qua", "module", "commit", "chapter", a.Chapter, "err", err)
 		}
-	}
 
 	pending.Stage = domain.CommitStageStateApplied
 	pending.UpdatedAt = time.Now().Format(time.RFC3339)
@@ -533,7 +551,9 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		needsNewVolume = boundary.NeedsNewVolume
 		nextVol = boundary.NextVolume
 		nextArc = boundary.NextArc
-		_ = t.store.Progress.UpdateVolumeArc(vol, arc)
+		if err := t.store.Progress.UpdateVolumeArc(vol, arc); err != nil {
+			return nil, fmt.Errorf("update volume/arc: %w: %w", errs.ErrStoreWrite, err)
+		}
 	}
 
 	var reviewRequired bool
@@ -567,8 +587,12 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	if t.applyCompletion(&result, progress) {
 		result.BookComplete = true
 	}
-	if p, _ := t.store.Progress.Load(); p != nil {
-		result.Flow = string(p.Flow)
+	latestProgress, err := t.store.Progress.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load progress after completion: %w: %w", errs.ErrStoreRead, err)
+	}
+	if latestProgress != nil {
+		result.Flow = string(latestProgress.Flow)
 	}
 
 	layered := progress != nil && progress.Layered
@@ -580,8 +604,16 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		}
 	}
 
+	// 机械规则是输出的一部分，必须在 ProgressMarked 前固化，恢复时直接返回同一输出。
+	violations := t.checkRules(content)
+	output, err := json.Marshal(commitOutput{CommitResult: result, RuleViolations: violations})
+	if err != nil {
+		return nil, fmt.Errorf("marshal commit output: %w", err)
+	}
+
 	pending.Stage = domain.CommitStageProgressMarked
 	pending.Result = &result
+	pending.Output = output
 	pending.UpdatedAt = time.Now().Format(time.RFC3339)
 	if err := t.store.Signals.SavePendingCommit(pending); err != nil {
 		return nil, fmt.Errorf("cập nhật kết quả commit đang chờ: %w: %w", errs.ErrStoreWrite, err)
@@ -589,6 +621,11 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 
 	if err := t.appendCommitCheckpoint(a.Chapter); err != nil {
 		return nil, fmt.Errorf("ghi checkpoint commit: %w: %w", errs.ErrStoreWrite, err)
+	}
+	pending.Stage = domain.CommitStageSignalSaved
+	pending.UpdatedAt = time.Now().Format(time.RFC3339)
+	if err := t.store.Signals.SavePendingCommit(pending); err != nil {
+		return nil, fmt.Errorf("update pending commit checkpoint stage: %w: %w", errs.ErrStoreWrite, err)
 	}
 
 	if err := t.store.Progress.ClearInProgress(); err != nil {
@@ -602,7 +639,58 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	if err := t.store.World.SaveRuleViolations(a.Chapter, violations); err != nil {
 		slog.Warn("Lưu vi phạm quy tắc cơ học thất bại", "module", "tools", "chapter", a.Chapter, "err", err)
 	}
-	return json.Marshal(commitOutput{CommitResult: result, RuleViolations: violations})
+	return output, nil
+}
+
+// finishPendingCommit 收尾 ProgressMarked/SignalSaved 中断窗口。Checkpoint 追加按
+// digest 幂等；只有 checkpoint 与中间态清理都成功后才删除恢复记录。
+func (t *CommitChapterTool) finishPendingCommit(pending domain.PendingCommit, progress *domain.Progress) (json.RawMessage, error) {
+	if pending.Stage == domain.CommitStageProgressMarked {
+		if err := t.appendCommitCheckpoint(pending.Chapter); err != nil {
+			return nil, fmt.Errorf("checkpoint commit: %w: %w", errs.ErrStoreWrite, err)
+		}
+		pending.Stage = domain.CommitStageSignalSaved
+		pending.UpdatedAt = time.Now().Format(time.RFC3339)
+		if err := t.store.Signals.SavePendingCommit(pending); err != nil {
+			return nil, fmt.Errorf("update pending commit checkpoint stage: %w: %w", errs.ErrStoreWrite, err)
+		}
+	}
+	if err := t.store.Progress.ClearInProgress(); err != nil {
+		return nil, fmt.Errorf("clear in-progress: %w: %w", errs.ErrStoreWrite, err)
+	}
+	if err := t.store.Signals.ClearPendingCommit(); err != nil {
+		return nil, fmt.Errorf("clear pending commit: %w: %w", errs.ErrStoreWrite, err)
+	}
+	if len(pending.Output) > 0 {
+		return append(json.RawMessage(nil), pending.Output...), nil
+	}
+	if pending.Result != nil {
+		return json.Marshal(pending.Result)
+	}
+	return t.buildSkipResult(pending.Chapter, progress)
+}
+
+func (t *CommitChapterTool) validateRewriteDraft(chapter int, progress *domain.Progress) (string, error) {
+	content, _, err := t.store.Drafts.LoadChapterContent(chapter)
+	if err != nil {
+		return "", fmt.Errorf("rewrite: load chapter content: %w: %w", errs.ErrStoreRead, err)
+	}
+	if content == "" {
+		return "", fmt.Errorf("no content found for chapter %d: %w", chapter, errs.ErrToolPrecondition)
+	}
+	existingFinal, err := t.store.Drafts.LoadChapterText(chapter)
+	if err != nil {
+		return "", fmt.Errorf("rewrite: load final chapter: %w: %w", errs.ErrStoreRead, err)
+	}
+	if existingFinal == "" || existingFinal != content {
+		return content, nil
+	}
+	mode := "重写"
+	if progress != nil && progress.Flow == domain.FlowPolishing {
+		mode = "打磨"
+	}
+	return "", fmt.Errorf("第 %d 章 drafts 与 chapters 内容完全相同，未检测到%s改动。请先调 draft_chapter(mode=write, chapter=%d) 写入%s后的新正文，再 commit_chapter: %w",
+		chapter, mode, chapter, mode, errs.ErrToolPrecondition)
 }
 
 func (t *CommitChapterTool) appendCommitCheckpoint(chapter int) error {
@@ -636,6 +724,7 @@ func (t *CommitChapterTool) executeRewriteCommit(
 	if content == "" {
 		return nil, fmt.Errorf("không tìm thấy nội dung cho chương %d: %w", chapter, errs.ErrToolPrecondition)
 	}
+	wordCount := utf8.RuneCountInString(content)
 
 	existingFinal, _ := t.store.Drafts.LoadChapterText(chapter)
 	if existingFinal != "" && existingFinal == content {
@@ -696,42 +785,73 @@ func (t *CommitChapterTool) executeRewriteCommit(
 		reComplete := false
 		switch {
 		case latest.Layered && latest.ReopenedFromComplete:
-			reComplete = layeredStructurallyComplete(t.store, latest)
+			reComplete, err = layeredStructurallyComplete(t.store, latest)
 		case latest.Layered:
-			reComplete = layeredComplete(t.store, latest)
+			reComplete, err = layeredComplete(t.store, latest)
 		default:
 			reComplete = latest.TotalChapters > 0 && len(latest.CompletedChapters) >= latest.TotalChapters
 		}
+		if err != nil {
+			return nil, fmt.Errorf("rewrite: evaluate completion: %w: %w", errs.ErrStoreRead, err)
+		}
 		if reComplete {
-			if cerr := t.store.Progress.MarkComplete(); cerr == nil {
-				bookComplete = true
-				if p, _ := t.store.Progress.Load(); p != nil {
-					flow = string(p.Flow)
-				}
+			if err := t.store.Progress.MarkComplete(); err != nil {
+				return nil, fmt.Errorf("rewrite: mark complete: %w: %w", errs.ErrStoreWrite, err)
+			}
+			bookComplete = true
+			p, err := t.store.Progress.Load()
+			if err != nil {
+				return nil, fmt.Errorf("rewrite: reload completed progress: %w: %w", errs.ErrStoreRead, err)
+			}
+			if p != nil {
+				flow = string(p.Flow)
 			}
 		}
 	}
 
 	violations := t.checkRules(content)
+	output, err := json.Marshal(map[string]any{
+		"chapter": chapter, "rewritten": true, "mode": mode, "word_count": wordCount,
+		"remaining_queue": remaining, "queue_drained": drained, "next_chapter": nextChapter,
+		"flow": flow, "book_complete": bookComplete, "rule_violations": violations,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("rewrite: marshal output: %w", err)
+	}
+	pending.Stage = domain.CommitStageProgressMarked
+	pending.Output = output
+	pending.UpdatedAt = time.Now().Format(time.RFC3339)
+	if err := t.store.Signals.SavePendingCommit(pending); err != nil {
+		return nil, fmt.Errorf("rewrite: update pending progress stage: %w: %w", errs.ErrStoreWrite, err)
+	}
+
+	// 7. Checkpoint 后再标 signal_saved，最后清理 PendingCommit。
+	if err := t.appendCommitCheckpoint(chapter); err != nil {
+		return nil, fmt.Errorf("rewrite: checkpoint commit: %w: %w", errs.ErrStoreWrite, err)
+	}
+	pending.Stage = domain.CommitStageSignalSaved
+	pending.UpdatedAt = time.Now().Format(time.RFC3339)
+	if err := t.store.Signals.SavePendingCommit(pending); err != nil {
+		return nil, fmt.Errorf("rewrite: update pending checkpoint stage: %w: %w", errs.ErrStoreWrite, err)
+	}
+	if err := t.store.Progress.ClearInProgress(); err != nil {
+		return nil, fmt.Errorf("rewrite: clear in-progress: %w: %w", errs.ErrStoreWrite, err)
+	}
+	if err := t.store.Signals.ClearPendingCommit(); err != nil {
+		return nil, fmt.Errorf("rewrite: clear pending commit: %w: %w", errs.ErrStoreWrite, err)
+	}
+
 	if err := t.store.World.SaveRuleViolations(chapter, violations); err != nil {
 		slog.Warn("Lưu vi phạm quy tắc cơ học thất bại", "module", "tools", "chapter", chapter, "err", err)
 	}
-	return json.Marshal(map[string]any{
-		"chapter":         chapter,
-		"rewritten":       true,
-		"mode":            mode,
-		"word_count":      wordCount,
-		"remaining_queue": remaining,
-		"queue_drained":   drained,
-		"next_chapter":    nextChapter,
-		"flow":            flow,
-		"book_complete":   bookComplete,
-		"rule_violations": violations,
-	})
+	return output, nil
 }
 
 func (t *CommitChapterTool) buildSkipResult(chapter int, progress *domain.Progress) (json.RawMessage, error) {
-	_, wordCount, _ := t.store.Drafts.LoadChapterContent(chapter)
+	_, wordCount, err := t.store.Drafts.LoadChapterContent(chapter)
+	if err != nil {
+		return nil, fmt.Errorf("load completed chapter: %w: %w", errs.ErrStoreRead, err)
+	}
 
 	result := domain.CommitResult{
 		Chapter:     chapter,
@@ -741,7 +861,11 @@ func (t *CommitChapterTool) buildSkipResult(chapter int, progress *domain.Progre
 	}
 
 	if progress != nil && progress.Layered {
-		if boundary, _ := t.store.Outline.CheckArcBoundary(chapter); boundary != nil {
+		boundary, err := t.store.Outline.CheckArcBoundary(chapter)
+		if err != nil {
+			return nil, fmt.Errorf("check completed chapter boundary: %w: %w", errs.ErrStoreRead, err)
+		}
+		if boundary != nil {
 			result.ArcEnd = boundary.IsArcEnd
 			result.VolumeEnd = boundary.IsVolumeEnd
 			result.Volume = boundary.Volume
@@ -768,8 +892,11 @@ func (t *CommitChapterTool) buildSkipResult(chapter int, progress *domain.Progre
 
 func loadCoreCharacterNameSet(s *store.Store) map[string]bool {
 	chars, err := s.Characters.Load()
-	if err != nil || len(chars) == 0 {
-		return nil
+	if err != nil {
+		return nil, err
+	}
+	if len(chars) == 0 {
+		return nil, nil
 	}
 	set := make(map[string]bool, len(chars)*2)
 	for _, c := range chars {
@@ -782,60 +909,87 @@ func loadCoreCharacterNameSet(s *store.Store) map[string]bool {
 			}
 		}
 	}
-	return set
+	return set, nil
 }
 
 func (t *CommitChapterTool) applyCompletion(result *domain.CommitResult, progress *domain.Progress) bool {
 	if progress == nil {
-		return false
+		return false, nil
+	}
+	if progress.Phase == domain.PhaseComplete {
+		return true, nil
 	}
 	if progress.Layered {
-		if layeredComplete(t.store, progress) {
-			_ = t.store.Progress.MarkComplete()
-			return true
+		complete, err := layeredComplete(t.store, progress)
+		if err != nil {
+			return false, fmt.Errorf("evaluate layered completion: %w: %w", errs.ErrStoreRead, err)
 		}
-		return false
+		if complete {
+			if err := t.store.Progress.MarkComplete(); err != nil {
+				return false, fmt.Errorf("mark book complete: %w: %w", errs.ErrStoreWrite, err)
+			}
+			return true, nil
+		}
+		return false, nil
 	}
 	if progress.TotalChapters > 0 && result.NextChapter > progress.TotalChapters {
-		_ = t.store.Progress.MarkComplete()
-		return true
+		if err := t.store.Progress.MarkComplete(); err != nil {
+			return false, fmt.Errorf("mark book complete: %w: %w", errs.ErrStoreWrite, err)
+		}
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 //
 
 func layeredStructurallyComplete(st *store.Store, progress *domain.Progress) bool {
 	if len(progress.PendingRewrites) > 0 {
-		return false
+		return false, nil
 	}
 	volumes, err := st.Outline.LoadLayeredOutline()
-	if err != nil || len(volumes) == 0 {
-		return false
+	if err != nil {
+		return false, fmt.Errorf("load layered outline: %w", err)
+	}
+	if len(volumes) == 0 {
+		return false, nil
 	}
 	for i := range volumes {
 		for j := range volumes[i].Arcs {
 			if !volumes[i].Arcs[j].IsExpanded() {
-				return false
+				return false, nil
 			}
 		}
 	}
 	expanded := len(domain.FlattenOutline(volumes))
-	return expanded > 0 && len(progress.CompletedChapters) >= expanded
+	return expanded > 0 && len(progress.CompletedChapters) >= expanded, nil
 }
 
 func finaleWrapped(st *store.Store, progress *domain.Progress) bool {
 	last := progress.LatestCompleted()
 	if last <= 0 {
-		return false
+		return false, nil
 	}
 	b, err := st.Outline.CheckArcBoundary(last)
-	if err != nil || b == nil || !b.IsArcEnd {
-		return false
+	if err != nil {
+		return false, fmt.Errorf("check finale boundary: %w", err)
 	}
-	return st.World.HasArcReview(last) &&
-		st.Summaries.HasArcSummary(b.Volume, b.Arc) &&
-		st.Summaries.HasVolumeSummary(b.Volume)
+	if b == nil || !b.IsArcEnd {
+		return false, nil
+	}
+	hasReview, err := st.World.HasArcReview(last)
+	if err != nil {
+		return false, fmt.Errorf("load finale review: %w", err)
+	}
+	hasArcSummary, err := st.Summaries.HasArcSummary(b.Volume, b.Arc)
+	if err != nil {
+		return false, fmt.Errorf("load finale arc summary: %w", err)
+	}
+	hasVolumeSummary, err := st.Summaries.HasVolumeSummary(b.Volume)
+	if err != nil {
+		return false, fmt.Errorf("load finale volume summary: %w", err)
+	}
+	return hasReview && hasArcSummary && hasVolumeSummary, nil
 }
 
 func layeredComplete(st *store.Store, progress *domain.Progress) bool {
@@ -856,5 +1010,8 @@ func layeredBookComplete(st *store.Store, progress *domain.Progress) bool {
 	if cerr != nil || compass == nil || len(compass.OpenThreads) > 0 {
 		return false
 	}
-	return true
+	if compass == nil || len(compass.OpenThreads) > 0 {
+		return false, nil
+	}
+	return true, nil
 }

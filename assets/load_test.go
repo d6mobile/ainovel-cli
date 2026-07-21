@@ -65,6 +65,20 @@ func TestLoad_NoOverrides(t *testing.T) {
 	}
 }
 
+func TestInterventionPromptsKeepScopeContract(t *testing.T) {
+	prompts := loadPrompts()
+	for _, phrase := range []string{"上下文不等于修改授权", "最小充分范围", "分析范围不等于修改范围"} {
+		if !strings.Contains(prompts.ArbiterIntervention, phrase) {
+			t.Fatalf("Arbiter 干预提示缺少范围契约 %q", phrase)
+		}
+	}
+	for _, phrase := range []string{"用户原始干预", "分析范围不等于修改范围", "最小充分章节集合"} {
+		if !strings.Contains(prompts.Editor, phrase) {
+			t.Fatalf("Editor 提示缺少范围契约 %q", phrase)
+		}
+	}
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

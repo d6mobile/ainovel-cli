@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -354,16 +355,7 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 	if err := s.World.UpdateForeshadow(1, foreshadow); err != nil {
 		t.Fatalf("UpdateForeshadow seed: %v", err)
 	}
-	if err := s.Signals.SavePendingCommit(domain.PendingCommit{
-		Chapter: 1,
-		Stage:   domain.CommitStageStateApplied,
-		Summary: "半提交摘要",
-	}); err != nil {
-		t.Fatalf("SavePendingCommit: %v", err)
-	}
-
-	tool := NewCommitChapterTool(s)
-	args, _ := json.Marshal(map[string]any{
+	persistedArgs, _ := json.Marshal(map[string]any{
 		"chapter":            1,
 		"summary":            "林墨遇到黑影并突破",
 		"characters":         []string{"林墨"},
@@ -371,6 +363,28 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 		"timeline_events":    timeline,
 		"state_changes":      stateChanges,
 		"foreshadow_updates": foreshadow,
+	})
+	if err := s.Signals.SavePendingCommit(domain.PendingCommit{
+		Chapter:      1,
+		Stage:        domain.CommitStageStarted,
+		Summary:      "半提交摘要",
+		Payload:      persistedArgs,
+		DraftContent: "第一章正文，林墨遇到黑影并突破。",
+	}); err != nil {
+		t.Fatalf("SavePendingCommit: %v", err)
+	}
+	if err := s.Drafts.SaveDraft(1, "重启后被新 Worker 覆盖、绝不能混入旧提交的正文。"); err != nil {
+		t.Fatalf("overwrite draft: %v", err)
+	}
+
+	tool := NewCommitChapterTool(s)
+	// 模拟重启后的 Writer 重新生成了不同参数；恢复必须忽略它，使用 persistedArgs。
+	args, _ := json.Marshal(map[string]any{
+		"chapter":         1,
+		"summary":         "错误的新摘要",
+		"characters":      []string{"林墨"},
+		"key_events":      []string{"错误事件"},
+		"timeline_events": []domain.TimelineEvent{{Time: "夜晚", Event: "不应写入的新事件"}},
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
 		t.Fatalf("Execute replay: %v", err)
@@ -394,6 +408,70 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 	}
 	if cp := s.Checkpoints.LatestByStep(domain.ChapterScope(1), "commit"); cp == nil {
 		t.Fatal("commit checkpoint should be written")
+	}
+	final, err := s.Drafts.LoadChapterText(1)
+	if err != nil {
+		t.Fatalf("LoadChapterText: %v", err)
+	}
+	if final != "第一章正文，林墨遇到黑影并突破。" {
+		t.Fatalf("recovery used overwritten draft: %q", final)
+	}
+}
+
+func TestCommitChapterRecoversProgressMarkedWindowWithExactOutput(t *testing.T) {
+	s := store.NewStore(t.TempDir())
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Init("test", 2); err != nil {
+		t.Fatalf("InitProgress: %v", err)
+	}
+	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+		t.Fatalf("UpdatePhase: %v", err)
+	}
+	if err := s.Progress.StartChapter(1); err != nil {
+		t.Fatalf("StartChapter: %v", err)
+	}
+	if err := s.Drafts.SaveFinalChapter(1, "第一章终稿"); err != nil {
+		t.Fatalf("SaveFinalChapter: %v", err)
+	}
+	if err := s.Progress.MarkChapterComplete(1, 100, "mystery", "quest"); err != nil {
+		t.Fatalf("MarkChapterComplete: %v", err)
+	}
+
+	want := json.RawMessage(`{"chapter":1,"committed":true,"recovered":"exact"}`)
+	if err := s.Signals.SavePendingCommit(domain.PendingCommit{
+		Chapter: 1,
+		Stage:   domain.CommitStageProgressMarked,
+		Output:  want,
+	}); err != nil {
+		t.Fatalf("SavePendingCommit: %v", err)
+	}
+
+	tool := NewCommitChapterTool(s)
+	got, err := tool.Execute(context.Background(), json.RawMessage(`{"chapter":1}`))
+	if err != nil {
+		t.Fatalf("Execute recovery: %v", err)
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, got); err != nil {
+		t.Fatalf("compact recovered output: %v", err)
+	}
+	if compact.String() != string(want) {
+		t.Fatalf("recovered output = %s, want exact document %s", got, want)
+	}
+	if pending, err := s.Signals.LoadPendingCommit(); err != nil || pending != nil {
+		t.Fatalf("pending commit should be cleared, pending=%+v err=%v", pending, err)
+	}
+	if cp := s.Checkpoints.LatestByStep(domain.ChapterScope(1), "commit"); cp == nil {
+		t.Fatal("commit checkpoint should be repaired")
+	}
+	p, err := s.Progress.Load()
+	if err != nil {
+		t.Fatalf("LoadProgress: %v", err)
+	}
+	if p.InProgressChapter != 0 {
+		t.Fatalf("in-progress chapter should be cleared, got %d", p.InProgressChapter)
 	}
 }
 

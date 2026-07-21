@@ -34,7 +34,7 @@ type RelationshipEntry struct {
 
 // ConsistencyIssue vấn đề tính nhất quán.
 type ConsistencyIssue struct {
-	Type        string `json:"type"`     // consistency / character / pacing / continuity / foreshadow / hook / aesthetic
+	Type        string `json:"type"`     // 模型依据 rubric 给出的具体问题维度
 	Severity    string `json:"severity"` // critical / error / warning
 	Description string `json:"description"`
 	Evidence    string `json:"evidence,omitempty"` // bằng chứng: đoạn nguyên văn, tình tiết cụ thể hoặc dữ liệu trạng thái
@@ -43,7 +43,7 @@ type ConsistencyIssue struct {
 
 // DimensionScore điểm đánh giá theo từng chiều.
 type DimensionScore struct {
-	Dimension string `json:"dimension"`         // consistency / character / pacing / continuity / foreshadow / hook / aesthetic
+	Dimension string `json:"dimension"`         // 由评审 rubric 定义，可按任务扩展
 	Score     int    `json:"score"`             // 0-100
 	Verdict   string `json:"verdict"`           // pass / warning / fail
 	Comment   string `json:"comment,omitempty"` // kết luận ngắn gọn cho chiều này

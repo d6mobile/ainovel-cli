@@ -106,7 +106,7 @@ func (t *ContextTool) Execute(_ context.Context, args json.RawMessage) (json.Raw
 		t.buildSimulationProfile(result, "planning_memory", warn)
 	}
 
-	t.buildUserRules(result)
+	t.buildUserRules(result, warn)
 
 	if len(warnings) > 0 {
 		result["_warnings"] = warnings
@@ -411,7 +411,7 @@ func (t *ContextTool) foundationStatus() map[string]any {
 	if len(missing) > 0 {
 		status["missing"] = missing
 	}
-	return status
+	return status, nil
 }
 
 func (t *ContextTool) ContextSummary() string {

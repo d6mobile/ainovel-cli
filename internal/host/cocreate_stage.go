@@ -16,8 +16,14 @@ func buildStoryStateSummary(s *store.Store) string {
 		return ""
 	}
 	var b strings.Builder
+	var warnings []string
+	warn := func(scope string, err error) {
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s 读取失败: %v", scope, err))
+		}
+	}
 
-	if progress, _ := s.Progress.Load(); progress != nil {
+	if progress, err := s.Progress.Load(); progress != nil {
 		if name := strings.TrimSpace(progress.NovelName); name != "" {
 			fmt.Fprintf(&b, "- Tên sách：《%s》\n", name)
 		}
@@ -29,9 +35,11 @@ func buildStoryStateSummary(s *store.Store) string {
 		if progress.Layered && progress.CurrentVolume > 0 {
 			fmt.Fprintf(&b, "- Vị trí hiện tại：Tập %d Cung %d\n", progress.CurrentVolume, progress.CurrentArc)
 		}
+	} else {
+		warn("progress", err)
 	}
 
-	if compass, _ := s.Outline.LoadCompass(); compass != nil {
+	if compass, err := s.Outline.LoadCompass(); compass != nil {
 		if dir := strings.TrimSpace(compass.EndingDirection); dir != "" {
 			fmt.Fprintf(&b, "- Hướng kết thúc：%s\n", dir)
 		}
@@ -41,6 +49,8 @@ func buildStoryStateSummary(s *store.Store) string {
 		if len(compass.OpenThreads) > 0 {
 			fmt.Fprintf(&b, "- Tuyến dài đang mở：%s\n", strings.Join(compass.OpenThreads, "；"))
 		}
+	} else {
+		warn("story_compass", err)
 	}
 
 	// Tóm tắt tập gần nhất, giúp trợ lý biết truyện vừa đi đến đâu
@@ -68,6 +78,8 @@ func buildStoryStateSummary(s *store.Store) string {
 		if len(names) > 0 {
 			fmt.Fprintf(&b, "- Nhân vật chính：%s\n", strings.Join(names, "、"))
 		}
+	} else {
+		warn("characters", err)
 	}
 
 	// Phục bút chưa thu hồi, tối đa 6 mục

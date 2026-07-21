@@ -67,6 +67,12 @@ func TestStartChapter(t *testing.T) {
 	store := NewStore(dir)
 	_ = store.Progress.Init("test", 10)
 
+	if err := store.Progress.StartChapter(1); err == nil {
+		t.Fatal("expected StartChapter outside writing phase to fail")
+	}
+	if err := store.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+		t.Fatalf("UpdatePhase writing: %v", err)
+	}
 	if err := store.Progress.StartChapter(1); err != nil {
 		t.Fatalf("StartChapter: %v", err)
 	}
@@ -90,18 +96,19 @@ func TestIsChapterCompleted(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)
 	_ = store.Progress.Init("test", 10)
+	_ = store.Progress.UpdatePhase(domain.PhaseWriting)
 
-	if store.Progress.IsChapterCompleted(1) {
+	if completed, err := store.Progress.IsChapterCompleted(1); err != nil || completed {
 		t.Fatal("chapter 1 should not be completed initially")
 	}
 
 	_ = store.Progress.StartChapter(1)
 	_ = store.Progress.MarkChapterComplete(1, 5000, "", "")
 
-	if !store.Progress.IsChapterCompleted(1) {
+	if completed, err := store.Progress.IsChapterCompleted(1); err != nil || !completed {
 		t.Fatal("chapter 1 should be completed after MarkChapterComplete")
 	}
-	if store.Progress.IsChapterCompleted(2) {
+	if completed, err := store.Progress.IsChapterCompleted(2); err != nil || completed {
 		t.Fatal("chapter 2 should not be completed")
 	}
 }
@@ -204,6 +211,24 @@ func TestCompleteRewrite(t *testing.T) {
 	}
 	if p.RewriteReason != "" {
 		t.Errorf("reason should be cleared, got %s", p.RewriteReason)
+	}
+}
+
+func TestApplyReviewOutcomePreservesExistingRewriteQueue(t *testing.T) {
+	s := NewStore(t.TempDir())
+	_ = s.Progress.Init("test", 3)
+	for _, ch := range []int{1, 2} {
+		_ = s.Progress.MarkChapterComplete(ch, 3000, "", "")
+	}
+	_ = s.Progress.SetPendingRewrites([]int{1, 2}, "已有返工")
+	_ = s.Progress.SetFlow(domain.FlowRewriting)
+
+	p, err := s.Progress.ApplyReviewOutcome(domain.FlowWriting, nil, "本次审阅通过")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Flow != domain.FlowRewriting || len(p.PendingRewrites) != 2 {
+		t.Fatalf("新审阅通过不能遗弃既有返工队列: flow=%s queue=%v", p.Flow, p.PendingRewrites)
 	}
 }
 

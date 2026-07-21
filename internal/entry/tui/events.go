@@ -47,7 +47,7 @@ type (
 		reply host.CoCreateReply
 		err   error
 	}
-	steerResultMsg     struct{}
+	steerResultMsg     struct{ err error }
 	continueResultMsg  struct{ err error }
 	spinnerTickMsg     time.Time
 	toolSpinnerTickMsg time.Time // spinner độc lập cho luồng sự kiện công cụ (nhanh hơn, độc lập với thanh đầu/ngôi sao)
@@ -206,8 +206,7 @@ func listenCoCreateDone(state *cocreateState) tea.Cmd {
 
 func steerRuntime(rt *host.Host, text string) tea.Cmd {
 	return func() tea.Msg {
-		rt.Steer(text)
-		return steerResultMsg{}
+		return steerResultMsg{err: rt.Steer(text)}
 	}
 }
 
@@ -253,6 +252,7 @@ func loadReport(dir string, reqID int) tea.Cmd {
 			reqID:      reqID,
 			report:     rep,
 			exportPath: exportPath,
+			exportErr:  exportErr,
 			finishedAt: time.Now(),
 		}
 	}

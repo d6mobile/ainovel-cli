@@ -12,12 +12,17 @@ const (
 
 // PendingCommit lưu thông tin khôi phục khi quá trình lưu chương bị gián đoạn.
 type PendingCommit struct {
-	Chapter        int           `json:"chapter"`
-	Stage          CommitStage   `json:"stage"`
-	Summary        string        `json:"summary,omitempty"`
-	HookType       string        `json:"hook_type,omitempty"`
-	DominantStrand string        `json:"dominant_strand,omitempty"`
-	Result         *CommitResult `json:"result,omitempty"`
-	StartedAt      string        `json:"started_at,omitempty"`
-	UpdatedAt      string        `json:"updated_at,omitempty"`
+	Chapter        int             `json:"chapter"`
+	Stage          CommitStage     `json:"stage"`
+	Rewrite        bool            `json:"rewrite,omitempty"`
+	RewriteMode    string          `json:"rewrite_mode,omitempty"`
+	Payload        json.RawMessage `json:"payload,omitempty"`
+	DraftContent   string          `json:"draft_content,omitempty"`
+	Output         json.RawMessage `json:"output,omitempty"`
+	Summary        string          `json:"summary,omitempty"`
+	HookType       string          `json:"hook_type,omitempty"`
+	DominantStrand string          `json:"dominant_strand,omitempty"`
+	Result         *CommitResult   `json:"result,omitempty"`
+	StartedAt      string          `json:"started_at,omitempty"`
+	UpdatedAt      string          `json:"updated_at,omitempty"`
 }

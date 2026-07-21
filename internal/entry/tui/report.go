@@ -37,10 +37,11 @@ func newReportState(width, height int, reqID int, startedAt time.Time) *reportSt
 	return state
 }
 
-func (s *reportState) load(report diag.Report, contentW int, exportPath string, finishedAt time.Time) {
+func (s *reportState) load(report diag.Report, contentW int, exportPath string, exportErr error, finishedAt time.Time) {
 	s.loading = false
 	s.report = &report
 	s.exportPath = exportPath
+	s.exportErr = exportErr
 	s.finishedAt = finishedAt
 	s.setContent(contentW)
 }
@@ -51,7 +52,7 @@ func (s *reportState) setContent(contentW int) {
 	case s.loading:
 		s.viewport.SetContent(renderReportLoadingText(contentW, s.startedAt))
 	case s.report != nil:
-		s.viewport.SetContent(renderReportText(*s.report, contentW, s.exportPath, s.startedAt, s.finishedAt))
+		s.viewport.SetContent(renderReportText(*s.report, contentW, s.exportPath, s.exportErr, s.startedAt, s.finishedAt))
 	default:
 		s.viewport.SetContent("Báo cáo chẩn đoán không khả dụng")
 	}
@@ -72,7 +73,7 @@ func reportModalSize(termW, termH int) (int, int) {
 	return w, h
 }
 
-func renderReportText(report diag.Report, width int, exportPath string, startedAt, finishedAt time.Time) string {
+func renderReportText(report diag.Report, width int, exportPath string, exportErr error, startedAt, finishedAt time.Time) string {
 	var b strings.Builder
 	st := report.Stats
 
@@ -87,6 +88,9 @@ func renderReportText(report diag.Report, width int, exportPath string, startedA
 		b.WriteString(exportStyle.Render("Đã xuất chẩn đoán ẩn danh (có thể dán vào GitHub issue)"))
 		b.WriteString("\n")
 		b.WriteString(dimStyle.Render(wrapText(exportPath, width)))
+		b.WriteString("\n\n")
+	} else if exportErr != nil {
+		b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("脱敏诊断导出失败：" + exportErr.Error()))
 		b.WriteString("\n\n")
 	}
 

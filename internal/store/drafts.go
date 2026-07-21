@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -129,9 +130,14 @@ func (s *DraftStore) ExtractDialogue(characterName string, aliases []string, max
 	names := append([]string{characterName}, aliases...)
 
 	var samples []string
+	var readErrs []error
 	for ch := maxCompletedChapter; ch >= 1 && len(samples) < maxSamples; ch-- {
 		text, err := s.LoadChapterText(ch)
-		if err != nil || text == "" {
+		if err != nil {
+			readErrs = append(readErrs, fmt.Errorf("chapter %d: %w", ch, err))
+			continue
+		}
+		if text == "" {
 			continue
 		}
 		paragraphs := strings.Split(text, "\n")
@@ -160,7 +166,7 @@ func (s *DraftStore) ExtractDialogue(characterName string, aliases []string, max
 			}
 		}
 	}
-	return samples
+	return samples, errors.Join(readErrs...)
 }
 
 // ExtractStyleAnchors trích xuất các đoạn văn tiêu biểu từ các chương đã lưu chương làm điểm neo phong cách.
@@ -171,9 +177,14 @@ func (s *DraftStore) ExtractStyleAnchors(maxAnchors, maxCompletedChapter int) []
 	}
 
 	var anchors []string
+	var readErrs []error
 	for ch := 1; ch <= maxCompletedChapter && len(anchors) < maxAnchors; ch++ {
 		text, err := s.LoadChapterText(ch)
-		if err != nil || text == "" {
+		if err != nil {
+			readErrs = append(readErrs, fmt.Errorf("chapter %d: %w", ch, err))
+			continue
+		}
+		if text == "" {
 			continue
 		}
 		paragraphs := strings.Split(text, "\n\n")
@@ -192,5 +203,5 @@ func (s *DraftStore) ExtractStyleAnchors(maxAnchors, maxCompletedChapter int) []
 			anchors = append(anchors, para)
 		}
 	}
-	return anchors
+	return anchors, errors.Join(readErrs...)
 }

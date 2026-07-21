@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"github.com/voocel/agentcore/schema"
 	"github.com/voocel/ainovel-cli/internal/store"
@@ -52,10 +51,20 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 	if err := json.Unmarshal(args, &a); err != nil {
 		return nil, fmt.Errorf("invalid args: %w", err)
 	}
+	if a.Source != "final" && a.Source != "draft" {
+		return nil, fmt.Errorf("source must be final or draft")
+	}
 
 	// Chế độ 1: trích xuất hội thoại nhân vật
 	if a.Character != "" {
-		chars, _ := t.store.Characters.Load()
+		var warnings []string
+		warn := func(scope string, err error) {
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("%s 读取失败: %v", scope, err))
+			}
+		}
+		chars, err := t.store.Characters.Load()
+		warn("characters", err)
 		var aliases []string
 		for _, c := range chars {
 			if c.Name == a.Character {
@@ -64,10 +73,13 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 			}
 		}
 		var maxCompleted int
-		if p, _ := t.store.Progress.Load(); p != nil {
+		p, err := t.store.Progress.Load()
+		warn("progress", err)
+		if p != nil {
 			maxCompleted = maxCompletedChapter(p.CompletedChapters)
 		}
-		samples := t.store.Drafts.ExtractDialogue(a.Character, aliases, 8, maxCompleted)
+		samples, err := t.store.Drafts.ExtractDialogue(a.Character, aliases, 8, maxCompleted)
+		warn("dialogue_samples", err)
 		result := map[string]any{
 			"character": a.Character,
 			"samples":   samples,
@@ -84,14 +96,32 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 		if maxRunes <= 0 {
 			maxRunes = 2000
 		}
-		texts, err := t.store.Drafts.LoadChapterRange(a.From, a.To, maxRunes)
-		if err != nil {
-			return nil, fmt.Errorf("load chapter range: %w", err)
+		var load func(int) (string, error)
+		if a.Source == "draft" {
+			load = t.store.Drafts.LoadDraft
+		} else {
+			load = t.store.Drafts.LoadChapterText
+		}
+		texts := make(map[int]string)
+		for ch := a.From; ch <= a.To; ch++ {
+			chapter, err := load(ch)
+			if err != nil {
+				return nil, fmt.Errorf("load %s chapter %d: %w", a.Source, ch, err)
+			}
+			if chapter == "" {
+				continue
+			}
+			runes := []rune(chapter)
+			if len(runes) > maxRunes {
+				chapter = string(runes[:maxRunes]) + "..."
+			}
+			texts[ch] = chapter
 		}
 		return json.Marshal(map[string]any{
 			"chapters": texts,
 			"from":     a.From,
 			"to":       a.To,
+			"source":   a.Source,
 		})
 	}
 
@@ -118,6 +148,7 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 	if content == "" {
 		return json.Marshal(map[string]any{
 			"chapter": a.Chapter,
+			"source":  a.Source,
 			"exists":  false,
 			"hint":    "Chương này chưa được viết, nếu cần viết hãy gọi draft_chapter trước",
 		})
@@ -125,6 +156,7 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 
 	return json.Marshal(map[string]any{
 		"chapter":    a.Chapter,
+		"source":     a.Source,
 		"content":    content,
 		"word_count": len([]rune(content)),
 	})

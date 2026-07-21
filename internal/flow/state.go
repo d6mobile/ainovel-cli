@@ -1,6 +1,8 @@
 package flow
 
 import (
+	"fmt"
+
 	"github.com/voocel/ainovel-cli/internal/domain"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
@@ -12,14 +14,22 @@ func LoadState(store *storepkg.Store) State {
 	s := State{
 		FoundationMissing: store.FoundationMissing(),
 	}
+	s.FoundationMissing = missing
 	// 规划级别:save_foundation 落 scale 时写入 RunMeta,补齐分支据此推导规划师。
 	// 读失败按未知处理(tier 空 → 补齐交 LLM 裁定),与其余事实的保守默认一致。
-	if meta, err := store.RunMeta.Load(); err == nil && meta != nil {
+	meta, err := store.RunMeta.Load()
+	if err != nil {
+		return s, fmt.Errorf("load run meta: %w", err)
+	}
+	if meta != nil {
 		s.PlanningTier = meta.PlanningTier
 	}
 	progress, err := store.Progress.Load()
-	if err != nil || progress == nil {
-		return s
+	if err != nil {
+		return s, fmt.Errorf("load progress: %w", err)
+	}
+	if progress == nil {
+		return s, nil
 	}
 	s.Progress = progress
 
@@ -29,13 +39,26 @@ func LoadState(store *storepkg.Store) State {
 
 	// Ranh giới cung truyện chỉ được tính trong chế độ phân tầng và khi có chương đã hoàn thành
 	if progress.Layered && s.LastCompleted > 0 {
-		if boundary, berr := store.Outline.CheckArcBoundary(s.LastCompleted); berr == nil && boundary != nil {
+		boundary, err := store.Outline.CheckArcBoundary(s.LastCompleted)
+		if err != nil {
+			return s, fmt.Errorf("check arc boundary: %w", err)
+		}
+		if boundary != nil {
 			s.ArcBoundary = boundary
 			if boundary.IsArcEnd {
-				s.HasArcReview = store.World.HasArcReview(s.LastCompleted)
-				s.HasArcSummary = store.Summaries.HasArcSummary(boundary.Volume, boundary.Arc)
+				s.HasArcReview, err = store.World.HasArcReview(s.LastCompleted)
+				if err != nil {
+					return s, fmt.Errorf("load arc review: %w", err)
+				}
+				s.HasArcSummary, err = store.Summaries.HasArcSummary(boundary.Volume, boundary.Arc)
+				if err != nil {
+					return s, fmt.Errorf("load arc summary: %w", err)
+				}
 				if boundary.IsVolumeEnd {
-					s.HasVolumeSummary = store.Summaries.HasVolumeSummary(boundary.Volume)
+					s.HasVolumeSummary, err = store.Summaries.HasVolumeSummary(boundary.Volume)
+					if err != nil {
+						return s, fmt.Errorf("load volume summary: %w", err)
+					}
 				}
 			}
 		}
@@ -44,9 +67,12 @@ func LoadState(store *storepkg.Store) State {
 	// 非分层全局审阅事实:仅在触发点读盘(其余组合 Route 不消费该字段)。
 	if !progress.Layered && s.LastCompleted > 0 {
 		if due, _ := domain.ShouldReview(len(progress.CompletedChapters)); due {
-			s.HasGlobalReview = store.World.HasGlobalReview(s.LastCompleted)
+			s.HasGlobalReview, err = store.World.HasGlobalReview(s.LastCompleted)
+			if err != nil {
+				return s, fmt.Errorf("load global review: %w", err)
+			}
 		}
 	}
 
-	return s
+	return s, nil
 }

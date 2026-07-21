@@ -397,7 +397,28 @@ func (t *UsageTracker) StartAutoSave(ctx context.Context) {
 	if t == nil || t.store == nil {
 		return
 	}
-	go t.autoSaveLoop(ctx)
+	done := make(chan struct{})
+	t.autoSaveMu.Lock()
+	t.autoSaveDone = done
+	t.autoSaveMu.Unlock()
+	go func() {
+		defer close(done)
+		t.autoSaveLoop(ctx)
+	}()
+}
+
+// WaitAutoSave 等待取消后的最后一次 flush 完成。Host.Close 先调用 cancel，
+// 再等待这里，避免 autoSaveLoop 与退出前 SaveNow 并发写同一快照。
+func (t *UsageTracker) WaitAutoSave() {
+	if t == nil {
+		return
+	}
+	t.autoSaveMu.Lock()
+	done := t.autoSaveDone
+	t.autoSaveMu.Unlock()
+	if done != nil {
+		<-done
+	}
 }
 
 //

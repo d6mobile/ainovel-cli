@@ -15,6 +15,7 @@ import (
 
 	"github.com/voocel/ainovel-cli/internal/arbiter"
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/errs"
 	"github.com/voocel/ainovel-cli/internal/flow"
 	"github.com/voocel/ainovel-cli/internal/notify"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
@@ -41,6 +42,7 @@ type engine struct {
 	onDone    func()
 
 	mu      sync.Mutex
+	wg      sync.WaitGroup
 	cancel  context.CancelFunc
 	running bool
 	pending []controlOp
@@ -80,7 +82,11 @@ func (e *engine) start(initial *flow.Instruction) bool {
 		e.deferGateForNext = false
 	}
 	e.lastKey, e.repeats, e.failedKey = "", 0, ""
-	go e.run(ctx)
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+		e.run(ctx)
+	}()
 	return true
 }
 
@@ -91,6 +97,12 @@ func (e *engine) abort() {
 	if cancel != nil {
 		cancel()
 	}
+}
+
+// wait 等待当前 Engine goroutine 完整退出。Host.Close 会先 cancel 再调用它，
+// 保证写工具和 runEnded 都结束后才关闭事件通道与退出进程。
+func (e *engine) wait() {
+	e.wg.Wait()
 }
 
 func (e *engine) isRunning() bool {
@@ -129,7 +141,10 @@ func (e *engine) run(ctx context.Context) {
 				op.dispatch = nil
 			}
 			if op.hold != nil || op.reopen != nil {
-				_ = e.applyControlOp(context.Background(), op)
+				if err := e.applyControlOp(context.Background(), op); err != nil {
+					e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Level: "error",
+						Summary: "引擎退出时补提干预失败: " + err.Error()})
+				}
 			}
 		}
 		e.onDone()
@@ -148,15 +163,30 @@ func (e *engine) run(ctx context.Context) {
 
 		inst := e.takeNext()
 		if inst == nil {
-			inst = flow.Route(flow.LoadState(e.store))
+			state, err := flow.LoadState(e.store)
+			if err != nil {
+				e.pauseWithNotify(notify.KindWorkerFailure, "路由事实读取失败，已暂停: "+err.Error())
+				return
+			}
+			inst = flow.Route(state)
 		}
 		if inst == nil {
-			inst = e.planStartFallback(ctx)
+			var err error
+			inst, err = e.planStartFallback(ctx)
+			if err != nil {
+				e.pauseWithNotify(notify.KindPlanStart, "规划恢复事实读取失败，已暂停: "+err.Error())
+				return
+			}
 		}
 		if inst == nil {
 			return
 		}
-		if replaced := e.precheck(inst); replaced != nil {
+		replaced, err := e.precheck(inst)
+		if err != nil {
+			e.pauseWithNotify(notify.KindWorkerFailure, "派单前置校验失败，已暂停: "+err.Error())
+			return
+		}
+		if replaced != nil {
 			inst = replaced
 		}
 		allowed, gateErr := e.gate.Allow(inst)
@@ -174,7 +204,7 @@ func (e *engine) run(ctx context.Context) {
 			continue
 		}
 
-		err := e.runWorker(ctx, inst)
+		err = e.runWorker(ctx, inst)
 		if ctx.Err() != nil {
 			return
 		}
@@ -222,30 +252,40 @@ func (e *engine) currentBudget() *BudgetSentinel {
 
 func (e *engine) planStartFallback(ctx context.Context) *flow.Instruction {
 	progress, err := e.store.Progress.Load()
-	if err != nil || progress == nil {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("load progress: %w", err)
+	}
+	if progress == nil {
+		return nil, nil
 	}
 	if progress.Phase == domain.PhaseWriting || progress.Phase == domain.PhaseComplete {
-		return nil
+		return nil, nil
 	}
 	meta, err := e.store.RunMeta.Load()
-	if err != nil || meta == nil || meta.PlanningTier != "" {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("load run meta: %w", err)
 	}
-	if len(e.store.FoundationMissing()) == 0 {
-		return nil
+	if meta == nil || meta.PlanningTier != "" {
+		return nil, nil
+	}
+	missing, err := e.store.FoundationMissing()
+	if err != nil {
+		return nil, fmt.Errorf("load foundation state: %w", err)
+	}
+	if len(missing) == 0 {
+		return nil, nil
 	}
 	if meta.PlanStart != nil {
 		return &flow.Instruction{
 			Agent:  meta.PlanStart.Planner,
 			Task:   meta.PlanStart.PlannerTask,
 			Reason: "按已固化的启动裁定开始规划",
-		}
+		}, nil
 	}
 	if meta.StartPrompt == "" {
-		return nil
+		return nil, nil
 	}
-	return e.retryPlanStart(ctx, meta.StartPrompt)
+	return e.retryPlanStart(ctx, meta.StartPrompt), nil
 }
 
 func (e *engine) retryPlanStart(ctx context.Context, prompt string) *flow.Instruction {
@@ -288,29 +328,43 @@ func (e *engine) precheck(inst *flow.Instruction) *flow.Instruction {
 		return &flow.Instruction{}
 	}
 	if inst.Agent == "writer" {
-		if ch := writerTargetChapter(e.store); ch > 0 {
+		if progress == nil || progress.Phase != domain.PhaseWriting {
+			phase := "<nil>"
+			if progress != nil {
+				phase = string(progress.Phase)
+			}
+			return nil, fmt.Errorf("writer 仅能在 writing 阶段派发（当前 phase=%s）: %w", phase, errInvalidWriteTarget)
+		}
+		ch, err := writerTargetChapter(e.store)
+		if err != nil {
+			return nil, err
+		}
+		if ch > 0 {
 			if err := tools.EnsureChapterExpanded(e.store, ch); err != nil {
 				return &flow.Instruction{
 					Agent:  "architect_long",
 					Task:   fmt.Sprintf("下一弧为骨架(%s)。调用 save_foundation(type=expand_arc) 展开下一弧;若当前卷已写完,改用 type=append_volume 追加并展开下一卷。", err),
 					Reason: "写作目标章未展开,先展开再续写",
-				}
+				}, nil
 			}
 		}
 		e.refresh()
 	}
-	return nil
+	return nil, nil
 }
 
 func writerTargetChapter(st *storepkg.Store) int {
 	progress, err := st.Progress.Load()
-	if err != nil || progress == nil {
-		return 0
+	if err != nil {
+		return 0, fmt.Errorf("load progress: %w", err)
+	}
+	if progress == nil {
+		return 0, fmt.Errorf("progress 未初始化")
 	}
 	if len(progress.PendingRewrites) > 0 {
-		return progress.PendingRewrites[0]
+		return progress.PendingRewrites[0], nil
 	}
-	return progress.NextChapter()
+	return progress.NextChapter(), nil
 }
 
 func (e *engine) trackDeadlock(ctx context.Context, inst **flow.Instruction) (stop bool) {
@@ -362,7 +416,8 @@ func (e *engine) runWorker(ctx context.Context, inst *flow.Instruction) error {
 			return fmt.Errorf("%w: %w", errInvalidWriteTarget, err)
 		}
 		if err := e.store.Progress.StartChapter(inst.Chapter); err != nil {
-			slog.Warn("预标进行中失败", "module", "engine", "chapter", inst.Chapter, "err", err)
+			e.observer.dispatchFinish(inst.Agent, true)
+			return fmt.Errorf("%w: 预标第 %d 章进行中失败: %w", errInvalidWriteTarget, inst.Chapter, err)
 		}
 	}
 
@@ -393,7 +448,7 @@ func (e *engine) handleWorkerError(ctx context.Context, inst *flow.Instruction, 
 		return false
 	}
 	e.failedKey = ""
-	facts := e.failureFacts("worker_failure", inst, msg)
+	facts := e.failureFacts("worker_failure", inst, werr)
 	decision, err := runObservedDecision(e.observer, "失败裁定", func() (arbiter.FailureDecision, error) {
 		return arbiter.DecideFailure(ctx, e.arbiterModel, e.failurePrompt, facts)
 	})
@@ -545,6 +600,16 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 		e.mu.Unlock()
 	}
 	return firstErr
+}
+
+// interventionDispatchTask 保留用户原始干预，避免 Arbiter 在转述任务时无意扩大
+// 修改目标。下游可以读取更广上下文做判断，但只能把原文当作动作授权来源。
+func interventionDispatchTask(task, original string) string {
+	task = strings.TrimSpace(task)
+	if strings.TrimSpace(original) == "" {
+		return task
+	}
+	return task + "\n\n用户原始干预（本次修改授权的唯一来源；上下文只用于理解，不得扩大目标或范围）：\n" + original
 }
 
 func (e *engine) recordStale(op controlOp) {

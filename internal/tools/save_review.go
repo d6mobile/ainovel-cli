@@ -106,6 +106,12 @@ func (t *SaveReviewTool) Execute(_ context.Context, args json.RawMessage) (json.
 		}
 	}
 
+	// 先原子应用控制状态，再保存审阅工件。若第二步失败，返工意图仍然存在；
+	// Writer 排空队列后，路由会因审阅工件缺失而重新派发 Editor，不会跳过审阅。
+	latest, err := t.store.Progress.ApplyReviewOutcome(flow, affected, r.Summary)
+	if err != nil {
+		return nil, fmt.Errorf("apply review outcome: %w", err)
+	}
 	if err := t.store.World.SaveReview(r); err != nil {
 		return nil, fmt.Errorf("lưu review: %w", err)
 	}
@@ -157,23 +163,11 @@ func (t *SaveReviewTool) Execute(_ context.Context, args json.RawMessage) (json.
 		"chapter":           r.Chapter,
 		"scope":             r.Scope,
 		"verdict":           r.Verdict,
-		"final_verdict":     finalVerdict,
-		"escalation_reason": escalationReason,
 		"affected_chapters": affected,
 		"issues":            len(r.Issues),
 		"next_flow":         nextFlow,
 		"next_chapter":      nextChapter,
 	})
-}
-
-var expectedReviewDimensions = map[string]struct{}{
-	"consistency": {},
-	"character":   {},
-	"pacing":      {},
-	"continuity":  {},
-	"foreshadow":  {},
-	"hook":        {},
-	"aesthetic":   {},
 }
 
 func validateReviewEntry(r domain.ReviewEntry) error {
@@ -200,6 +194,21 @@ func validateReviewEntry(r domain.ReviewEntry) error {
 	return nil
 }
 
+// reviewFlow 是文学裁定与持久化协议之间唯一的映射点。verdict 由 Editor 决定；
+// 这里只接受 Router 能恢复的三种控制结果。
+func reviewFlow(verdict string) (domain.FlowState, error) {
+	switch verdict {
+	case "accept":
+		return domain.FlowWriting, nil
+	case "polish":
+		return domain.FlowPolishing, nil
+	case "rewrite":
+		return domain.FlowRewriting, nil
+	default:
+		return "", fmt.Errorf("invalid review verdict: %q", verdict)
+	}
+}
+
 func validateDimensions(dimensions []domain.DimensionScore) error {
 	if len(dimensions) != len(expectedReviewDimensions) {
 		return fmt.Errorf("dimensions phải chứa đúng %d mục", len(expectedReviewDimensions))
@@ -213,7 +222,7 @@ func validateDimensions(dimensions []domain.DimensionScore) error {
 		if _, ok := seen[dim.Dimension]; ok {
 			return fmt.Errorf("chiều bị trùng: %s", dim.Dimension)
 		}
-		seen[dim.Dimension] = struct{}{}
+		seen[name] = struct{}{}
 		if dim.Score < 0 || dim.Score > 100 {
 			return fmt.Errorf("điểm không hợp lệ cho %s: %d", dim.Dimension, dim.Score)
 		}

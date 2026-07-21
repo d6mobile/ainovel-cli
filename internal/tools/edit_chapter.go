@@ -84,6 +84,12 @@ func (t *EditChapterTool) Execute(ctx context.Context, args json.RawMessage) (js
 	if a.OldString == a.NewString {
 		return nil, fmt.Errorf("old_string và new_string giống nhau, không cần sửa: %w", errs.ErrToolArgs)
 	}
+	if err := t.store.Progress.ValidateChapterWork(a.Chapter); err != nil {
+		return nil, err
+	}
+	if err := EnsureChapterExpanded(t.store, a.Chapter); err != nil {
+		return nil, err
+	}
 
 	// Kiểm tra归属: chương đã hoàn thành phải có trong hàng đợi tái viết, tránh làm bẩn bản hoàn chỉnh
 	if t.store.Progress.IsChapterCompleted(a.Chapter) {

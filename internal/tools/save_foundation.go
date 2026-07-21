@@ -76,6 +76,11 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		return nil, fmt.Errorf(
 			"Trong giai đoạn viết, không được dùng %s để ghi đè toàn bộ dàn ý. Hãy dùng expand_arc để mở rộng cung mẫu, hoặc append_volume để thêm cuốn mới: %w", a.Type, errs.ErrToolPrecondition)
 	}
+	if a.Scale != "" {
+		if err := t.store.RunMeta.SetPlanningTier(domain.PlanningTier(a.Scale)); err != nil {
+			return nil, fmt.Errorf("save planning tier: %w: %w", errs.ErrStoreWrite, err)
+		}
+	}
 
 	volumeEnd := a.Type == "append_volume" || a.Type == "complete_book"
 	if volumeEnd && strings.TrimSpace(a.Reason) == "" {
@@ -83,11 +88,18 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 	}
 	var volumeEndFacts json.RawMessage
 	if volumeEnd {
-		if p, _ := t.store.Progress.Load(); p != nil {
-			volumeEndFacts, _ = json.Marshal(map[string]any{
+		p, err := t.store.Progress.Load()
+		if err != nil {
+			return nil, fmt.Errorf("load progress for volume-end facts: %w: %w", errs.ErrStoreRead, err)
+		}
+		if p != nil {
+			volumeEndFacts, err = json.Marshal(map[string]any{
 				"completed_chapters": len(p.CompletedChapters),
 				"total_chapters":     p.TotalChapters,
 			})
+			if err != nil {
+				return nil, fmt.Errorf("marshal volume-end facts: %w", err)
+			}
 		}
 	}
 
@@ -102,10 +114,14 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 			return nil, fmt.Errorf("lưu premise: %w: %w", errs.ErrStoreWrite, err)
 		}
 		if name != "" {
-			_ = t.store.Progress.SetNovelName(name)
+			if err := t.store.Progress.SetNovelName(name); err != nil {
+				return nil, fmt.Errorf("save novel name: %w: %w", errs.ErrStoreWrite, err)
+			}
 			result["novel_name"] = name
 		}
-		_ = t.store.Progress.UpdatePhase(domain.PhasePremise)
+		if err := t.store.Progress.UpdatePhase(domain.PhasePremise); err != nil {
+			return nil, fmt.Errorf("update premise phase: %w: %w", errs.ErrStoreWrite, err)
+		}
 
 	case "outline":
 		var entries []domain.OutlineEntry
@@ -115,12 +131,22 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		if err := t.store.Outline.SaveOutline(entries); err != nil {
 			return nil, fmt.Errorf("lưu outline: %w: %w", errs.ErrStoreWrite, err)
 		}
-		_ = t.store.Progress.UpdatePhase(domain.PhaseOutline)
-		_ = t.store.Progress.SetTotalChapters(len(entries))
+		if err := t.store.Progress.UpdatePhase(domain.PhaseOutline); err != nil {
+			return nil, fmt.Errorf("update outline phase: %w: %w", errs.ErrStoreWrite, err)
+		}
+		if err := t.store.Progress.SetTotalChapters(len(entries)); err != nil {
+			return nil, fmt.Errorf("set total chapters: %w: %w", errs.ErrStoreWrite, err)
+		}
 		if domain.PlanningTier(a.Scale) != domain.PlanningTierLong {
-			_ = t.store.Progress.SetLayered(false)
-			_ = t.store.Progress.UpdateVolumeArc(0, 0)
-			_ = t.store.Outline.ClearLayeredOutline()
+			if err := t.store.Progress.SetLayered(false); err != nil {
+				return nil, fmt.Errorf("disable layered mode: %w: %w", errs.ErrStoreWrite, err)
+			}
+			if err := t.store.Progress.UpdateVolumeArc(0, 0); err != nil {
+				return nil, fmt.Errorf("reset volume/arc: %w: %w", errs.ErrStoreWrite, err)
+			}
+			if err := t.store.Outline.ClearLayeredOutline(); err != nil {
+				return nil, fmt.Errorf("clear layered outline: %w: %w", errs.ErrStoreWrite, err)
+			}
 		}
 		result["chapters"] = len(entries)
 
@@ -137,11 +163,19 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 			return nil, fmt.Errorf("lưu dàn ý đã làm phẳng: %w: %w", errs.ErrStoreWrite, err)
 		}
 		total := domain.TotalChapters(volumes)
-		_ = t.store.Progress.UpdatePhase(domain.PhaseOutline)
-		_ = t.store.Progress.SetTotalChapters(total)
-		_ = t.store.Progress.SetLayered(true)
+		if err := t.store.Progress.UpdatePhase(domain.PhaseOutline); err != nil {
+			return nil, fmt.Errorf("update outline phase: %w: %w", errs.ErrStoreWrite, err)
+		}
+		if err := t.store.Progress.SetTotalChapters(total); err != nil {
+			return nil, fmt.Errorf("set total chapters: %w: %w", errs.ErrStoreWrite, err)
+		}
+		if err := t.store.Progress.SetLayered(true); err != nil {
+			return nil, fmt.Errorf("enable layered mode: %w: %w", errs.ErrStoreWrite, err)
+		}
 		if len(volumes) > 0 && len(volumes[0].Arcs) > 0 {
-			_ = t.store.Progress.UpdateVolumeArc(volumes[0].Index, volumes[0].Arcs[0].Index)
+			if err := t.store.Progress.UpdateVolumeArc(volumes[0].Index, volumes[0].Arcs[0].Index); err != nil {
+				return nil, fmt.Errorf("set initial volume/arc: %w: %w", errs.ErrStoreWrite, err)
+			}
 		}
 		result["volumes"] = len(volumes)
 		result["chapters"] = total
@@ -192,7 +226,10 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		if err := decode("append_volume", &vol); err != nil {
 			return nil, err
 		}
-		prior, _ := t.store.Outline.LoadLayeredOutline()
+		prior, err := t.store.Outline.LoadLayeredOutline()
+		if err != nil {
+			return nil, fmt.Errorf("load layered outline: %w: %w", errs.ErrStoreRead, err)
+		}
 		if err := t.store.AppendVolume(vol); err != nil {
 			return nil, fmt.Errorf("thêm cuốn: %w: %w", errs.ErrStoreWrite, err)
 		}
@@ -281,9 +318,15 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 	result["remaining"] = remaining
 	result["foundation_ready"] = ready
 	if ready {
-		if p, _ := t.store.Progress.Load(); p != nil &&
+		p, err := t.store.Progress.Load()
+		if err != nil {
+			return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
+		}
+		if p != nil &&
 			p.Phase != domain.PhaseWriting && p.Phase != domain.PhaseComplete {
-			_ = t.store.Progress.UpdatePhase(domain.PhaseWriting)
+			if err := t.store.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+				return nil, fmt.Errorf("update writing phase: %w: %w", errs.ErrStoreWrite, err)
+			}
 			result["phase"] = string(domain.PhaseWriting)
 		}
 	}
@@ -359,9 +402,12 @@ func normalizeFoundationContent(raw json.RawMessage) (string, error) {
 	return string(raw), nil
 }
 
-func (t *SaveFoundationTool) isWriting() bool {
-	p, _ := t.store.Progress.Load()
-	return p != nil && p.Phase == domain.PhaseWriting
+func (t *SaveFoundationTool) isWriting() (bool, error) {
+	p, err := t.store.Progress.Load()
+	if err != nil {
+		return false, err
+	}
+	return p != nil && p.Phase == domain.PhaseWriting, nil
 }
 
 func (t *SaveFoundationTool) recordVolumeEndDecision(action, reason string, facts json.RawMessage, result map[string]any) {
@@ -372,7 +418,11 @@ func (t *SaveFoundationTool) recordVolumeEndDecision(action, reason string, fact
 	if _, ok := result["final_volume"]; ok {
 		decision["final"] = true
 	}
-	raw, _ := json.Marshal(decision)
+	raw, err := json.Marshal(decision)
+	if err != nil {
+		slog.Error("卷末裁定序列化失败", "module", "tools", "action", action, "err", err)
+		return
+	}
 	if _, err := t.store.Decisions.Append(store.DecisionRecord{
 		Kind:     "volume_end",
 		Decider:  "architect",

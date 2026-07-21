@@ -22,7 +22,13 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, version string) error {
 	}
 	bridge := newAskUserBridge()
 	rt.AskUser().SetHandler(bridge.handler)
-	cleanup := logger.SetupFile(rt.Dir(), "tui.log", false)
+	cleanup, err := logger.SetupFile(rt.Dir(), "tui.log", false)
+	var logWarning error
+	if err != nil {
+		logWarning = fmt.Errorf("文件日志不可用，已继续使用终端日志：%w", err)
+		slog.Warn("TUI 文件日志不可用，继续运行", "module", "tui", "err", err)
+		cleanup = func() {}
+	}
 	defer cleanup()
 	defer rt.Close()
 

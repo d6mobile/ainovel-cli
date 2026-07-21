@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -30,11 +31,7 @@ func newTextHandler(w io.Writer, level slog.Level) slog.Handler {
 // 供需要独立日志文件的子系统（如导入流程）使用。打开失败回退默认 logger 不中断业务，
 // 但错误必须返回给调用方向用户呈现——否则 UI 指引用户去看一个并不存在的日志文件。
 func FileLogger(outputDir, filename string) (*slog.Logger, func(), error) {
-	logPath := filepath.Join(outputDir, "logs", filename)
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
-		return slog.Default(), func() {}, err
-	}
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := openLogFile(outputDir, filename)
 	if err != nil {
 		return slog.Default(), func() {}, err
 	}
@@ -52,15 +49,31 @@ func SetupFile(outputDir, filename string, alsoStderr bool) func() {
 
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
-		Setup(io.Discard, slog.LevelInfo)
-		return func() {}
+		return nil, err
 	}
 
 	var w io.Writer = f
 	if alsoStderr {
 		w = io.MultiWriter(os.Stderr, f)
 	}
+	previous := slog.Default()
 	Setup(w, slog.LevelDebug)
 
-	return func() { _ = f.Close() }
+	return func() {
+		slog.SetDefault(previous)
+		_ = f.Close()
+	}, nil
+}
+
+func openLogFile(outputDir, filename string) (*os.File, error) {
+	logPath := filepath.Join(outputDir, "logs", filename)
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		return nil, fmt.Errorf("create log directory %q: %w", filepath.Dir(logPath), err)
+	}
+
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open log file %q: %w", logPath, err)
+	}
+	return f, nil
 }

@@ -15,12 +15,14 @@ type FailureFacts struct {
 	Kind          string   `json:"kind"` // worker_failure | deadlock
 	Agent         string   `json:"agent,omitempty"`
 	Task          string   `json:"task,omitempty"`
-	Error         string   `json:"error,omitempty"`   // worker_failure:错误文本
+	Error         string   `json:"error,omitempty"` // worker_failure:错误文本
+	ErrorKind     string   `json:"error_kind,omitempty"`
 	Repeats       int      `json:"repeats,omitempty"` // deadlock:同指令已派次数
 	Phase         string   `json:"phase,omitempty"`
 	NextChapter   int      `json:"next_chapter,omitempty"`
 	PendingQueue  []int    `json:"pending_rewrites,omitempty"`
 	FoundationGap []string `json:"foundation_missing,omitempty"`
+	FactWarnings  []string `json:"fact_warnings,omitempty"`
 }
 
 // FailureDecision 失败/僵局裁定。
@@ -30,7 +32,7 @@ type FailureDecision struct {
 	Reason   string      `json:"reason"`
 }
 
-func (d *FailureDecision) Validate() error {
+func (d *FailureDecision) ValidateAgainst(f FailureFacts) error {
 	if strings.TrimSpace(d.Reason) == "" {
 		return fmt.Errorf("reason 不能为空")
 	}
@@ -41,7 +43,10 @@ func (d *FailureDecision) Validate() error {
 		if d.Dispatch == nil {
 			return fmt.Errorf("reroute 必须附 dispatch")
 		}
-		return d.Dispatch.validate()
+		if err := d.Dispatch.validate(); err != nil {
+			return err
+		}
+		return validateDispatchAgainst(d.Dispatch, f.Phase)
 	default:
 		return fmt.Errorf("action 非法: %q（可选 retry / reroute / abort）", d.Action)
 	}
@@ -50,5 +55,7 @@ func (d *FailureDecision) Validate() error {
 // DecideFailure 失败/僵局咨询。失败语义:返回 error → Engine 按最保守路径处理
 // (暂停 + notify),绝不无限咨询。
 func DecideFailure(ctx context.Context, model agentcore.ChatModel, systemPrompt string, facts FailureFacts) (FailureDecision, error) {
-	return decide(ctx, model, systemPrompt, marshalPayload(facts), (*FailureDecision).Validate)
+	return decide(ctx, model, systemPrompt, marshalPayload(facts), func(d *FailureDecision) error {
+		return d.ValidateAgainst(facts)
+	})
 }

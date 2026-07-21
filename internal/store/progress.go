@@ -108,9 +108,11 @@ func (s *ProgressStore) StartChapter(chapter int) error {
 			return err
 		}
 		if p == nil {
-			p = &domain.Progress{}
+			return fmt.Errorf("progress 未初始化: %w", errs.ErrToolPrecondition)
 		}
-		p.Phase = domain.PhaseWriting
+		if p.Phase != domain.PhaseWriting {
+			return fmt.Errorf("章节写作仅允许在 writing 阶段（当前 phase=%s）: %w", p.Phase, errs.ErrToolPrecondition)
+		}
 		if p.Flow != domain.FlowRewriting && p.Flow != domain.FlowPolishing {
 			p.Flow = domain.FlowWriting
 		}
@@ -125,10 +127,13 @@ func (s *ProgressStore) StartChapter(chapter int) error {
 
 func (s *ProgressStore) IsChapterCompleted(chapter int) bool {
 	p, err := s.Load()
-	if err != nil || p == nil {
-		return false
+	if err != nil {
+		return false, err
 	}
-	return slices.Contains(p.CompletedChapters, chapter)
+	if p == nil {
+		return false, nil
+	}
+	return slices.Contains(p.CompletedChapters, chapter), nil
 }
 
 func (s *ProgressStore) MarkChapterComplete(chapter, wordCount int, hookType, dominantStrand string) error {
@@ -395,7 +400,10 @@ func (s *ProgressStore) ValidateChapterWork(chapter int) error {
 		return err
 	}
 	if p == nil {
-		return nil
+		return fmt.Errorf("progress 未初始化: %w", errs.ErrToolPrecondition)
+	}
+	if p.Phase != domain.PhaseWriting {
+		return fmt.Errorf("章节写作仅允许在 writing 阶段（当前 phase=%s）: %w", p.Phase, errs.ErrToolPrecondition)
 	}
 	if p.Flow != domain.FlowRewriting && p.Flow != domain.FlowPolishing {
 		return nil

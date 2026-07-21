@@ -60,6 +60,8 @@ type Host struct {
 	exclusive       string
 	exclusiveCancel context.CancelFunc
 	closeOnce       sync.Once
+	asyncWG         sync.WaitGroup
+	closing         bool
 
 	interMu sync.Mutex
 
@@ -482,13 +484,20 @@ func (h *Host) doIntervention(text string, restart bool) {
 	if err := h.store.RunMeta.SetPendingSteer(text); err != nil {
 		slog.Warn("Lưu bền can thiệp thất bại (vẫn tiếp tục phán quyết, nhưng mất bảo vệ khi sập)", "module", "host", "err", err)
 	}
-	clearPending := func() {
+	clearPending := func() error {
 		if err := h.store.ClearHandledSteer(); err != nil {
 			slog.Warn("Xóa can thiệp đã xử lý thất bại", "module", "host", "err", err)
 		}
+		return nil
 	}
 
-	facts := arbiter.CollectInterventionFacts(h.store)
+	facts, err := arbiter.CollectInterventionFacts(h.store)
+	if err != nil {
+		wrapped := fmt.Errorf("收集干预事实失败，未调用 Arbiter: %w", err)
+		h.emitEvent(Event{Time: time.Now(), Category: "ERROR", Agent: "arbiter",
+			Summary: wrapped.Error(), Detail: wrapped.Error(), Level: "error"})
+		return wrapped
+	}
 	facts.Running = h.engine.isRunning()
 
 	start := time.Now()
@@ -518,8 +527,10 @@ func (h *Host) doIntervention(text string, restart bool) {
 
 	if derr != nil {
 		h.emitEvent(newInterventionFailureEvent(derr))
-		clearPending()
-		return
+		if err := clearPending(); err != nil {
+			return fmt.Errorf("%v；%w", derr, err)
+		}
+		return derr
 	}
 
 	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Phán quyết: " + decision.Reason, Level: "info"})
@@ -559,7 +570,7 @@ func (h *Host) doIntervention(text string, restart bool) {
 	if restart && !h.engine.isRunning() {
 		if err := h.budget.Refuse(); err != nil {
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: err.Error(), Level: "warn"})
-			return
+			return err
 		}
 		h.refreshWriterRestore()
 		if !h.startEngine(nil) {
@@ -567,6 +578,7 @@ func (h *Host) doIntervention(text string, restart bool) {
 				Summary: "Can thiệp đã có hiệu lực, nhưng Engine chưa thể chạy tiếp ngay; hãy nhập tiếp sau hoặc khởi động lại ứng dụng để khôi phục"})
 		}
 	}
+	return nil
 }
 
 func newInterventionFailureEvent(err error) Event {
@@ -736,6 +748,30 @@ func (h *Host) Close() {
 		slog.Warn("Lưu usage trước khi thoát thất bại", "module", "usage", "err", err)
 	}
 	h.closeOnce.Do(func() {
+		h.mu.Lock()
+		h.closing = true
+		cancelExclusive := h.exclusiveCancel
+		h.mu.Unlock()
+
+		h.observer.setAborting(true)
+		if h.runCancel != nil {
+			h.runCancel() // 中断在途的宿主侧裁定调用与 supervisor 转发
+		}
+		if cancelExclusive != nil {
+			cancelExclusive()
+		}
+		h.engine.abort()
+		h.engine.wait()
+		h.asyncWG.Wait()
+
+		if h.usageCancel != nil {
+			h.usageCancel()
+			h.usageCancel = nil
+		}
+		h.usage.WaitAutoSave()
+		if err := h.usage.SaveNow(); err != nil {
+			slog.Warn("usage 退出前落盘失败", "module", "usage", "err", err)
+		}
 		close(h.done)
 		close(h.events)
 		close(h.streamCh)
@@ -747,7 +783,20 @@ func (h *Host) runEnded() {
 	h.observer.finalize()
 
 	h.mu.Lock()
-	progress, _ := h.store.Progress.Load()
+	progress, err := h.store.Progress.Load()
+	if err != nil {
+		if h.lifecycle == lifecycleRunning {
+			h.lifecycle = lifecycleIdle
+		}
+		h.mu.Unlock()
+		h.emitEvent(Event{Time: time.Now(), Category: "ERROR", Level: "error",
+			Summary: "引擎结束时读取进度失败: " + err.Error()})
+		select {
+		case h.done <- struct{}{}:
+		default:
+		}
+		return
+	}
 	if progress != nil && progress.Phase == domain.PhaseComplete {
 		h.lifecycle = lifecycleCompleted
 		summary := completionSummary(h.store)
@@ -807,6 +856,9 @@ func (h *Host) Dir() string                 { return h.store.Dir() }
 func (h *Host) AskUser() *tools.AskUserTool { return h.askUser }
 
 func (h *Host) emitEvent(ev Event) {
+	// 退出期 Close() 可能已 close(h.events)，此时并发 emit 的通道发送会 panic
+	// （select/default 挡不住关通道发送）。emitEvent 是所有事件的唯一漏斗，在此兜住
+	// 竞态即可覆盖引擎/asyncWG 之外的同步 emit 者（Abort/abortWithEvent、预算哨兵等）。
 	defer func() { recover() }()
 	if ev.Summary != "" || ev.Detail != "" {
 		level := slog.LevelInfo
@@ -841,6 +893,7 @@ func (h *Host) emitEvent(ev Event) {
 }
 
 func (h *Host) emitDelta(delta string) {
+	// 同 emitEvent：兜住退出期 h.streamCh 已 close 时的并发发送竞态。
 	defer func() { recover() }()
 	select {
 	case h.streamCh <- delta:
@@ -1408,6 +1461,10 @@ func (h *Host) Simulate(ctx context.Context) (<-chan sim.Event, error) {
 	if err := h.acquireExclusive("tạo hồ sơ mô phỏng"); err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	h.mu.Lock()
+	h.exclusiveCancel = cancel
+	h.mu.Unlock()
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -1434,6 +1491,10 @@ func (h *Host) ImportSimulationProfile(ctx context.Context, path string) (<-chan
 	if err := h.acquireExclusive("nhập hồ sơ mô phỏng"); err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	h.mu.Lock()
+	h.exclusiveCancel = cancel
+	h.mu.Unlock()
 	ch, err := sim.RunImport(ctx, h.store, path)
 	if err != nil {
 		h.releaseExclusive()
@@ -1470,19 +1531,29 @@ func (h *Host) releaseExclusive() {
 
 func superviseExclusive[T any](h *Host, src <-chan T) <-chan T {
 	out := make(chan T, 32)
-	go func() {
+	if !h.launchAsync(func() {
 		defer close(out)
 		defer h.releaseExclusive()
 		for ev := range src {
-			out <- ev
+			select {
+			case out <- ev:
+			case <-h.runCtx.Done():
+				// 关闭期继续排空源通道，避免 producer 因终态事件阻塞而无法退出。
+				for range src {
+				}
+				return
+			}
 		}
-	}()
+	}) {
+		close(out)
+		h.releaseExclusive()
+	}
 	return out
 }
 
 func (h *Host) superviseImport(src <-chan imp.Event, opts imp.Options) <-chan imp.Event {
 	out := make(chan imp.Event, 32)
-	go func() {
+	if !h.launchAsync(func() {
 		defer close(out)
 		released := false
 		release := func() {
@@ -1497,16 +1568,30 @@ func (h *Host) superviseImport(src <-chan imp.Event, opts imp.Options) <-chan im
 				release()
 				ev.Continued = h.continueAfterImport(opts)
 			}
-			out <- ev
+			select {
+			case out <- ev:
+			case <-h.runCtx.Done():
+				for range src {
+				}
+				return
+			}
 		}
-	}()
+	}) {
+		close(out)
+		h.releaseExclusive()
+	}
 	return out
 }
 
 func (h *Host) continueAfterImport(opts imp.Options) bool {
 	want := opts.ContinueAfter
 	if !want {
-		if in, err := imp.OpenWorkspace(h.store.Dir()).LoadIntent(); err == nil && in != nil {
+		in, err := imp.OpenWorkspace(h.store.Dir()).LoadIntent()
+		if err != nil {
+			slog.Warn("导入自动接力读取 Intent 失败", "module", "host", "err", err)
+			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",
+				Summary: "导入已完成，但自动接力意图读取失败：" + err.Error()})
+		} else if in != nil {
 			want = in.ContinueAfterImport
 		}
 	}
