@@ -213,7 +213,7 @@ func (h *Host) prepareProviderDraftLocked(draft ModelConfigurationDraft) (prepar
 		return preparedProviderDraft{}, fmt.Errorf("未知 API Key 操作 %q", draft.APIKeyAction)
 	}
 	if pc.RequiresAPIKey(draft.Provider) && pc.APIKey == "" {
-		return preparedProviderDraft{}, fmt.Errorf("Provider %q 必须配置 API Key", draft.Provider)
+		return preparedProviderDraft{}, fmt.Errorf("Provider %q phải cấu hình API Key", draft.Provider)
 	}
 
 	if candidate.Providers == nil {
@@ -280,9 +280,9 @@ func (h *Host) ConfigureModels(draft ModelConfigurationDraft) error {
 	// 模型客户端被重建后重新下发推理强度：applyThinkingLocked 按各角色的新模型能力钳制生效值，
 	// 存储的强度意图保持不变。
 	h.applyThinkingLocked("default")
-	summary := fmt.Sprintf("Provider 配置已保存：%s → %s", draft.Provider, h.configPath)
+	summary := fmt.Sprintf("Cấu hình Provider đã được lưu: %s → %s", draft.Provider, h.configPath)
 	if draft.Provider != h.cfg.Provider {
-		summary += "；使用 /model 切换"
+		summary += "; dùng /model để chuyển"
 	}
 	h.emitEvent(Event{
 		Time: time.Now(), Category: "SYSTEM", Level: "info",

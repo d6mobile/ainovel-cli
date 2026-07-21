@@ -459,7 +459,7 @@ func (m *Model) textareaIsMultiline() bool {
 func (m *Model) inputHints() string {
 	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
 	if m.quitPending {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Bold(true).Render("Press Ctrl+C again to exit")
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Bold(true).Render("Nhấn Ctrl+C lần nữa để thoát")
 	}
 	limitHint := m.inputLimitHint()
 	// (modeNew)，， Ctrl+R ；

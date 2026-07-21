@@ -1,4 +1,4 @@
-# Chapter Advance Gate
+# Cổng kiểm soát tiến chương
 
 > Trạng thái: đã triển khai
 > Ngày: 2026-07-14
@@ -6,7 +6,7 @@
 
 ## 1. Vì sao cần cơ chế này
 
-Rủi ro lớn nhất của sáng tác tự động dài kỳ không phải là tốn thêm một lần gọi model, mà là trong lúc người dùng đang xem lại, hệ thống vẫn tiếp tục viết chương mới và kéo các tóm tắt, trạng thái nhân vật, cùng phản hồi đề cương dựa trên nội dung cũ vào nguồn факт tiếp theo. Xoá một chương viết thừa không tự động hoàn tác các trạng thái phát sinh này, và người dùng sẽ mất niềm tin vào quy trình sáng tác.
+Rủi ro lớn nhất của sáng tác tự động dài kỳ không phải là tốn thêm một lần gọi model, mà là trong lúc người dùng đang xem lại, hệ thống vẫn tiếp tục viết chương mới và kéo các tóm tắt, trạng thái nhân vật, cùng phản hồi đề cương dựa trên nội dung cũ vào nguồn sự thật tiếp theo. Xoá một chương viết thừa không tự động hoàn tác các trạng thái phát sinh này, và người dùng sẽ mất niềm tin vào quy trình sáng tác.
 
 Hệ thống vẫn giữ mặc định là “đã có mục tiêu thì tiếp tục tự chạy đến khi hoàn thành”, vì vậy không biến xác nhận theo từng chương thành hành vi mặc định toàn cục. Hệ thống chỉ cung cấp hai chính sách rõ ràng:
 

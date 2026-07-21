@@ -3,10 +3,28 @@ package userrules
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/voocel/agentcore"
 )
+
+func TestNormalizerPromptsAreLocalized(t *testing.T) {
+	for name, text := range map[string]string{
+		"system": normalizerSystemPrompt,
+		"retry":  normalizerRetryHint,
+	} {
+		if strings.Contains(text, "你是") || strings.Contains(text, "请严格") || strings.Contains(text, "不要任何解释文字") {
+			t.Fatalf("%s prompt còn tiếng Trung: %q", name, text)
+		}
+	}
+	if !strings.Contains(normalizerSystemPrompt, "Bạn là bộ chuẩn hoá quy tắc") {
+		t.Fatalf("system prompt chưa được Việt hoá: %q", normalizerSystemPrompt)
+	}
+	if !strings.Contains(normalizerRetryHint, "Chỉ xuất một đối tượng JSON") {
+		t.Fatalf("retry hint chưa được Việt hoá: %q", normalizerRetryHint)
+	}
+}
 
 func TestExtractJSON_StripsCodeFences(t *testing.T) {
 	cases := []struct{ in, wantHas string }{

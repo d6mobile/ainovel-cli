@@ -115,8 +115,8 @@ func TestLoad_ThreeTierAppendAndReplace(t *testing.T) {
 	if !strings.HasPrefix(b.Voice, builtinVoice) {
 		t.Fatal("追加语义必须保留内置原文为前缀")
 	}
-	giIdx := strings.Index(b.Voice, "## 用户全局文风覆盖")
-	bkIdx := strings.Index(b.Voice, "## 本书文风覆盖")
+	giIdx := strings.Index(b.Voice, "## Ghi đè văn phong toàn cục của người dùng")
+	bkIdx := strings.Index(b.Voice, "## Ghi đè văn phong riêng của sách này")
 	if giIdx < 0 || bkIdx < 0 || giIdx > bkIdx {
 		t.Fatalf("追加段顺序错误:global=%d book=%d", giIdx, bkIdx)
 	}
