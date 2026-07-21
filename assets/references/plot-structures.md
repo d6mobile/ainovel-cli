@@ -2,45 +2,45 @@
 
 Các mẫu cấu trúc cốt truyện phổ biến, dùng để lên kế hoạch cho các chương tiểu thuyết.
 
-## Cấu Trúc Ba Hồi (Three-Act Structure)
+## Cấu Trúc Ba Hồi
 
 Cấu trúc cốt truyện kinh điển nhất, phù hợp với hầu hết các truyện ngắn.
 
-### Hồi 1: Thiết Lập (Act 1 - Setup) — khoảng 25%
+### Hồi 1: Thiết Lập — khoảng 25%
 
 | Chương | Nội dung |
 |--------|----------|
 | Chương 1 | Giới thiệu cuộc sống thường ngày của nhân vật chính (hiện trạng) |
-| Chương 2 | Sự kiện kích hoạt (Inciting Incident) — sự kiện phá vỡ hiện trạng |
+| Chương 2 | Sự kiện kích hoạt — sự kiện phá vỡ hiện trạng |
 | Chương 3 | Nhân vật chính từ chối lời kêu gọi, nhưng cuối cùng quyết định hành động |
 
 **Ví dụ điểm móc hồi 1:**
 - "Cánh cửa mở ra, người bước vào là kẻ đã chết ba năm trước."
 - "Cô nhận được lá thư, người ký tên chính là bản thân cô."
 
-### Hồi 2: Đối Đầu (Act 2 - Confrontation) — khoảng 50%
+### Hồi 2: Đối Đầu — khoảng 50%
 
 | Chương | Nội dung |
 |--------|----------|
 | Chương 4–5 | Nhân vật chính bước vào thế giới mới, đối mặt thử thách |
-| Chương 6 | Điểm giữa (Midpoint) — bước ngoặt lớn / tiết lộ thông tin quan trọng |
+| Chương 6 | Bước ngoặt giữa truyện — tiết lộ thông tin quan trọng |
 | Chương 7–8 | Leo thang căng thẳng, đồng minh có thể phản bội |
 
 **Ví dụ điểm móc hồi 2:**
 - "Người thầy hướng dẫn hóa ra là kẻ chủ mưu đứng sau tất cả."
 - "Đồng minh duy nhất đã mất tích."
 
-### Hồi 3: Kết Thúc (Act 3 - Resolution) — khoảng 25%
+### Hồi 3: Kết Thúc — khoảng 25%
 
 | Chương | Nội dung |
 |--------|----------|
 | Chương 9 | Mọi thứ dường như thất bại, đây là điểm thấp nhất |
-| Chương 10 | Cao trào (Climax) — cuộc đối đầu cuối cùng |
+| Chương 10 | Cao trào — cuộc đối đầu cuối cùng |
 | Chương cuối | Kết cục, khắc họa hiện trạng mới |
 
 ---
 
-## Hành Trình Anh Hùng (Hero's Journey)
+## Hành Trình Người Hùng
 
 Cấu trúc kinh điển của nhà thần thoại học Joseph Campbell, phù hợp với thể loại phiêu lưu / kỳ ảo.
 
@@ -70,7 +70,7 @@ Phù hợp với thể loại trinh thám / suy luận / kinh dị.
 ### Hồi 1: Bí Ẩn Xuất Hiện
 
 | Chương | Nội dung | Điểm móc |
-|--------|----------|-----------|
+|--------|----------|----------|
 | Chương 1 | Phát hiện thi thể / sự kiện xảy ra | Ai đã làm? |
 | Chương 2 | Thám tử tiếp nhận vụ án | Tại sao vụ án này đặc biệt? |
 | Chương 3 | Điều tra ban đầu, phát hiện manh mối | Manh mối chỉ về ai? |
@@ -78,7 +78,7 @@ Phù hợp với thể loại trinh thám / suy luận / kinh dị.
 ### Hồi 2: Điều Tra Đi Sâu
 
 | Chương | Nội dung | Điểm móc |
-|--------|----------|-----------|
+|--------|----------|----------|
 | Chương 4 | Thẩm vấn nghi phạm, ai cũng có nghi vấn | Ai đang nói dối? |
 | Chương 5 | Manh mối mới xuất hiện, chỉ về hướng bất ngờ | Chúng ta đã sai từ đầu chăng? |
 | Chương 6 | Sự kiện thứ hai xảy ra, lộ ra quy luật | Đây là vụ án liên hoàn? |
@@ -87,7 +87,7 @@ Phù hợp với thể loại trinh thám / suy luận / kinh dị.
 ### Hồi 3: Sự Thật Được Tiết Lộ
 
 | Chương | Nội dung | Điểm móc |
-|--------|----------|-----------|
+|--------|----------|----------|
 | Chương 8 | Đột phá lớn / đảo ngược tình thế | Người chúng ta tin tưởng có vấn đề? |
 | Chương 9 | Cuộc đối đầu cuối cùng | Sự thật là gì? Cái giá phải trả là gì? |
 | Chương 10 | Vụ án được giải quyết, còn nghi vấn sót lại | Thực sự đã kết thúc chưa? |
@@ -148,7 +148,7 @@ Chương 6: Kết cục → khắc họa hậu quả
 
 ---
 
-## Cấu Trúc Đảo Ngược (Twist-Based)
+## Cấu Trúc Dựa Trên Cú Ngoặt
 
 Phù hợp với thể loại kinh dị tâm lý / trinh thám.
 
@@ -250,10 +250,10 @@ Kết thúc: kết thúc nhạt nhẽo / không có điểm căng thẳng
 
 | Thể loại | Cấu trúc đề xuất | Số chương |
 |----------|-----------------|-----------|
-| Phiêu lưu / kỳ ảo | Hành trình anh hùng | 8–12 chương |
+| Phiêu lưu / kỳ ảo | Hành trình người hùng | 8–12 chương |
 | Trinh thám / huyền bí | Cấu trúc trinh thám | 8–10 chương |
 | Ngôn tình | Cấu trúc ngôn tình | 6–10 chương |
-| Hành động / kinh dị | Cấu trúc kinh dị | 5–8 chương |
-| Tâm lý / đảo ngược | Cấu trúc đảo ngược | 6–8 chương |
-| Nhiều nhân vật chính | Đa tuyến | 10–15 chương |
+| Hành động / kinh dị | Cấu trúc kinh dị / hành động | 5–8 chương |
+| Tâm lý / cú ngoặt | Cấu trúc dựa trên cú ngoặt | 6–8 chương |
+| Nhiều nhân vật chính | Cấu trúc đa tuyến | 10–15 chương |
 | Truyện cực ngắn | Cấu trúc 3 chương | 3 chương |
