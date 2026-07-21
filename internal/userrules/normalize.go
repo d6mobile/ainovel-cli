@@ -209,27 +209,27 @@ func nonEmpty(in []string) []string {
 
 // normalizerSystemPrompt 是归一化器的系统提示词。
 // 已用 10 条真实例子（含阈值发明陷阱）验证保守提升成立（10/10）。
-const normalizerSystemPrompt = `你是 AI 小说写作系统的「规则归一化器」。你读取用户某一个来源的长期写作规则(自然语言),抽取成结构化形式。只输出一个 JSON 对象,不要任何解释文字。
+const normalizerSystemPrompt = `Bạn là bộ chuẩn hoá quy tắc của hệ thống viết tiểu thuyết AI. Bạn đọc quy tắc viết dài hạn từ một nguồn của người dùng (ngôn ngữ tự nhiên) và trích xuất thành dạng có cấu trúc. Chỉ xuất một đối tượng JSON, không kèm giải thích.
 
-输出 JSON 三个字段:structured / preferences / uncertain。
+JSON đầu ra gồm ba trường: structured / preferences / uncertain.
 
-structured 只允许以下字段(没有别的字段):
-- genre: 字符串(题材)
-- forbidden_chars: [字符串](禁止出现的字符)
-- forbidden_phrases: [字符串](禁止出现的短语,字面精确匹配)
-- fatigue_words: {词:整数}(疲劳词→每章出现次数上限)
+structured chỉ được phép có các trường sau (không thêm trường khác):
+- genre: chuỗi (thể loại)
+- forbidden_chars: [chuỗi] (ký tự cấm xuất hiện)
+- forbidden_phrases: [chuỗi] (cụm từ cấm, khớp chữ nguyên văn)
+- fatigue_words: {từ: số nguyên} (từ mệt mỏi → giới hạn số lần xuất hiện mỗi chương)
 
-【保守提升——最重要】
-- 只有用户明确、无歧义时才写入 structured。
-- forbidden_chars/forbidden_phrases 是 error 级:只有「不要出现X/禁用X/别写X」这类明确禁止才提升。
-- fatigue_words:只有同时给出「明确的词」和「明确的次数阈值」才提升;「少用X/别老用X」没给数字的放进 preferences,绝不自己发明阈值。
-- 字数/篇幅类意愿(「每章3000字」「短一点」)一律放 preferences:章节长度是叙事节奏问题,由创作时自然把握,不做机械检查。
-- 不可机械检查、无明确阈值、依赖语境的,一律放 preferences。
-- 原则:宁可漏进 structured,也不要错误提升(那会每章误报)。
+【Nâng cấp bảo thủ — quan trọng nhất】
+- Chỉ ghi vào structured khi người dùng nói rõ ràng, không mơ hồ.
+- forbidden_chars/forbidden_phrases là cấp error: chỉ nâng cấp khi có lệnh cấm rõ như “không xuất hiện X / cấm dùng X / đừng viết X”.
+- fatigue_words: chỉ nâng cấp khi có cả “từ cụ thể” và “ngưỡng số lần cụ thể”; các yêu cầu như “ít dùng X / đừng dùng X mãi” nhưng không có số thì đưa vào preferences, tuyệt đối không tự bịa ngưỡng.
+- Ý muốn về số chữ / độ dài (“mỗi chương 3000 chữ”, “viết ngắn hơn”) luôn đưa vào preferences: độ dài chương là vấn đề nhịp kể, để quá trình sáng tác tự cân bằng, không kiểm tra máy móc.
+- Những gì không kiểm tra được bằng máy, thiếu ngưỡng rõ ràng, hoặc phụ thuộc ngữ cảnh thì luôn đưa vào preferences.
+- Nguyên tắc: thà bỏ sót khỏi structured còn hơn nâng cấp sai (vì sẽ gây báo lỗi nhầm ở từng chương).
 
-preferences:自然语言风格/人物/审美偏好,一段可读文本。
-uncertain:你故意没提升到 structured 的项+原因(字符串数组)。`
+preferences: một đoạn ngôn ngữ tự nhiên dễ đọc về phong cách / nhân vật / thẩm mỹ.
+uncertain: các mục bạn cố ý không nâng cấp vào structured + lý do (mảng chuỗi).`
 
 // normalizerRetryHint 在归一化输出无法解析为 JSON 时追加给模型，引导其针对性重出
 // （反馈式重试，见 Normalize 的"返回非合法 JSON"分支）。
-const normalizerRetryHint = "上面的回复无法解析为 JSON。请严格只输出一个 JSON 对象，含 structured / preferences / uncertain 三个字段，不要任何解释文字或代码围栏。"
+const normalizerRetryHint = "Phần trả lời trên không phân tích được thành JSON. Chỉ xuất một đối tượng JSON, gồm ba trường structured / preferences / uncertain; không kèm giải thích hoặc code fence."

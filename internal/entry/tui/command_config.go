@@ -195,7 +195,7 @@ func (s *modelConfigState) applyProviderChoice(choice configProviderChoice) {
 		s.providerType = "openai" // Tùy chỉnhMặc định openai， hub
 		s.baseURL = ""
 		s.step = configStepCustomName
-		s.startTextInput("", "Provider 名称", false)
+		s.startTextInput("", "Tên Provider", false)
 		return
 	}
 	s.provider = choice.preset.Name

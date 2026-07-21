@@ -62,11 +62,11 @@ Bài học tiền lệ: chú thích `WithSimulationGuidance` từng ghi lại l�
 Việc ghép theo ngữ nghĩa append có ranh giới đánh dấu rõ ràng:
 
 ```
-## 项目默认文风
+## Văn phong mặc định của dự án
 ...
-## 用户全局文风覆盖(以下要求优先于项目默认)
+## Ghi đè văn phong toàn cục của người dùng (các yêu cầu dưới đây ưu tiên hơn mặc định của dự án)
 ...
-## 本书文风覆盖(以下要求优先于以上全部)
+## Ghi đè văn phong riêng của sách này (các yêu cầu dưới đây ưu tiên hơn tất cả phần trên)
 ...
 ```
 

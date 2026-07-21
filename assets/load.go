@@ -111,10 +111,10 @@ func (b *Bundle) OverrideVoice(raw string) {
 func resolveAppendable(builtin, name string, opts LoadOptions) string {
 	out := builtin
 	if s := readOverride(opts.HomeStyleDir, name); s != "" {
-		out += "\n\n## 用户全局文风覆盖（以下要求优先于项目默认）\n\n" + s
+		out += "\n\n## Ghi đè văn phong toàn cục của người dùng (các yêu cầu dưới đây ưu tiên hơn mặc định của dự án)\n\n" + s
 	}
 	if s := readOverride(opts.BookStyleDir, name); s != "" {
-		out += "\n\n## 本书文风覆盖（以下要求优先于以上全部）\n\n" + s
+		out += "\n\n## Ghi đè văn phong riêng của sách này (các yêu cầu dưới đây ưu tiên hơn tất cả phần trên)\n\n" + s
 	}
 	return out
 }
@@ -191,7 +191,7 @@ func loadPrompts() Prompts {
 	}
 }
 
-// WithSimulationGuidance 给核心 prompt 追加仿写画像指引。导出供 eval 等外部场景做
+// WithSimulationGuidance 给核心 prompt 追加chân dung mô phỏng văn phong指引。导出供 eval 等外部场景做
 // variant 覆盖时复用，保证覆盖后的 prompt 与 Load 产出的 baseline 等价（同一包装路径）。
 func WithSimulationGuidance(prompt, role string) string {
 	return prompt + "\n\n" + strings.ReplaceAll(simulationGuidance, "{{role}}", role)
@@ -199,7 +199,7 @@ func WithSimulationGuidance(prompt, role string) string {
 
 // OverridePrompt 用 raw 覆盖 bundle 中指定 prompt 文件对应的角色提示词，并走与 Load
 // 完全相同的 WithSimulationGuidance 包装——eval 做 A/B 时只需调它，不必复制包装逻辑，
-// 否则 baseline 带仿写画像后缀、variant 不带，A/B 不等价。file 为 prompt 文件名。
+// 否则 baseline 带chân dung mô phỏng văn phong后缀、variant 不带，A/B 不等价。file 为 prompt 文件名。
 // 注意:覆盖 writer.md 时 raw 须自带 {{VOICE}} 占位符(协议模板语义);只想 A/B 文风
 // 用 OverrideVoice。
 func (b *Bundle) OverridePrompt(file, raw string) error {
@@ -229,11 +229,11 @@ var promptRole = map[string]string{
 	"editor.md":          "editor",
 }
 
-const simulationGuidance = `## 仿写画像
+const simulationGuidance = `## Chân dung mô phỏng văn phong
 
-当 novel_context 返回 simulation_profile 时，必须把它视为当前作品的仿写方向约束。{{role}} 应读取其中的 style、lexicon、plot_design、hook_design、pacing_density、reader_engagement 和 role_guidance。
+Khi novel_context trả về simulation_profile, phải xem đó là ràng buộc định hướng mô phỏng cho tác phẩm hiện tại. {{role}} cần đọc các trường style, lexicon, plot_design, hook_design, pacing_density, reader_engagement và role_guidance.
 
-使用原则：借鉴结构、节奏、钩子、信息释放和吸引读者的手法；不要复制原文句子、人物、地名、专有设定或固定桥段。若 simulation_profile 与用户显式要求冲突，优先服从用户要求。`
+Nguyên tắc sử dụng: học cấu trúc, nhịp kể, điểm móc, cách hé lộ thông tin và kỹ thuật thu hút độc giả; không sao chép câu chữ, nhân vật, địa danh, thiết lập riêng hoặc mô-típ cố định từ nguyên tác. Nếu simulation_profile xung đột với yêu cầu rõ ràng của người dùng, ưu tiên yêu cầu của người dùng.`
 
 // loadStyles 枚举内置风格预设,再按 全局 → 本书 顺序叠加覆盖目录下 styles/*.md
 // (同名整文件替换,新文件名即新增风格;风格是整体声音,不做合并)。

@@ -202,7 +202,7 @@ Coordinator và logic khôi phục session của nó, Coordinator StopGuard, gia
 1. *"Độ đúng của phán quyết sẽ không tăng"* —— đúng; khác biệt thực là tập trung/biên tập/kiểm tra trước so với trí nhớ session, giá trị ròng nhỉnh hơn một chút và lần đầu tiên đo được
 2. *"Hiện tại chạy được, đụng mặt điều khiển thì mạo hiểm"* —— thừa nhận; nền móng được sinh ra cho việc này, làm từng bước có thể dừng và có thể lùi
 3. *"Kiến trúc không phải nút thắt, chất lượng nội dung mới là"* —— đúng một phần, tầng văn phong đi trước
-4. **Review 1 (2026-07-12)**: thiếu giao thức chốt trạng thái → §V; Step 2 quá mỏng → §VIII câu hỏi bắt buộc + cổng nguyên mẫu; trình tự khởi động → §VI; tuyên bố "trạng thái bất hợp lệ không thể biểu đạt" quá đà → lịch sử tiến hóa ở 4.1; sai факт về white-list vai trò arbiter → 4.2; vệ sinh audit → 4.3
+4. **Review 1 (2026-07-12)**: thiếu giao thức chốt trạng thái → §V; Step 2 quá mỏng → §VIII câu hỏi bắt buộc + cổng nguyên mẫu; trình tự khởi động → §VI; tuyên bố "trạng thái bất hợp lệ không thể biểu đạt" quá đà → lịch sử tiến hóa ở 4.1; sai sự thật về white-list vai trò arbiter → 4.2; vệ sinh audit → 4.3
 5. **Review 2 (2026-07-12)**: kiểu `Decision` theo từng tình huống (chấp nhận, 4.1); sắp xếp lại thứ tự di chuyển, Engine đi trước (chấp nhận, §VII); thống nhất chốt ở biên (chấp nhận, §V); `PlanStartRecord` (chấp nhận, §VI); không đổi tên host (chấp nhận); đề xuất giữ số chữ trong file giao thức (chấp nhận, xem `voice-layer`). **Ý kiến giữ lại**: audit phải giữ `input` nếu không thì không thể phát lại (4.3); `completion_dispute` hạ xuống thành tình huống dự bị (§III)
 
 ## XII. Kỷ luật và điều không làm

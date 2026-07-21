@@ -32,6 +32,17 @@ func hubFieldIndex(fields []hubField, id string) int {
 }
 
 // Selecting an existing Provider should open the detail hub (review info first, then tweak fields), not jump straight into "edit protocol".
+func TestCustomProviderNamePromptIsLocalized(t *testing.T) {
+	st := &modelConfigState{editModelIdx: -1}
+	st.applyProviderChoice(configProviderChoice{custom: true})
+	if st.step != configStepCustomName {
+		t.Fatalf("provider tùy chỉnh phải mở bước nhập tên, got step=%d", st.step)
+	}
+	if got := st.input.Placeholder; got != "Tên Provider" {
+		t.Fatalf("placeholder tên Provider chưa được Việt hoá: %q", got)
+	}
+}
+
 func TestSelectingProviderOpensHub(t *testing.T) {
 	st := &modelConfigState{editModelIdx: -1}
 	st.applyProviderChoice(configProviderChoice{existing: &host.ProviderSnapshot{
@@ -299,7 +310,7 @@ func TestProviderHubDeleteClearsOnlyOptionalAPIKey(t *testing.T) {
 
 func TestConfigTextInputSupportsCursorEditing(t *testing.T) {
 	state := &modelConfigState{step: configStepCustomName}
-	state.startTextInput("ac", "Provider 名称", false)
+	state.startTextInput("ac", "Tên Provider", false)
 	state.input.SetCursor(1)
 	m := Model{modelConfig: state}
 	m.handleModelConfigKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})

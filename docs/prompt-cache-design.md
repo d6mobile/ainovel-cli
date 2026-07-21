@@ -126,7 +126,7 @@ Khắc phục: sau khi projection thì commit (`CommitOnProject: true`), để v
 append-only cho đến lần vượt ngưỡng tiếp theo.
 
 > Dạng tổng quát: nén context là **một lần đứt có kế hoạch** (reset tiền tố, trả giá đầy đủ một lần),
-> điều đó không sao; điều không chấp nhận được là **lượt nào cũng đứt**. Nén либо không làm, либо làm xong thì cố định.
+> điều đó không sao; điều không chấp nhận được là **lượt nào cũng đứt**. Nén thì hoặc không làm, hoặc đã làm xong thì phải cố định.
 
 ### Kỷ luật 3: nội dung động phải đi ở phần đuôi
 

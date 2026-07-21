@@ -39,6 +39,17 @@ func TestCommandInputHighlightsOnlyRegisteredCommands(t *testing.T) {
 	}
 }
 
+func TestInputHintsQuitPendingIsLocalized(t *testing.T) {
+	m := Model{quitPending: true}
+	got := ansi.Strip(m.inputHints())
+	if !strings.Contains(got, "Nhấn Ctrl+C lần nữa để thoát") {
+		t.Fatalf("quit hint chưa được Việt hoá: %q", got)
+	}
+	if strings.Contains(got, "Press Ctrl+C again to exit") {
+		t.Fatalf("quit hint còn tiếng Anh: %q", got)
+	}
+}
+
 func TestCommandInputDoesNotHighlightArguments(t *testing.T) {
 	oldProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
