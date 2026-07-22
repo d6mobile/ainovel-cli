@@ -58,7 +58,7 @@ type observer struct {
 
 	// aborting 由 Host 在 Abort()/Close() 入口置位、Start/Resume/Continue 清位。
 	// 置位期间所有 context-cancel 衍生的错误事件被抑制（既是用户期望，也避免与
-	// "用户手动暂停"事件重复）。真实异常（非 cancel）仍照常上报。
+	// "Người dùng tạm dừng thủ công"事件重复）。真实异常（非 cancel）仍照常上报。
 	aborting atomic.Bool
 
 	streamThinking      bool
@@ -74,7 +74,7 @@ type observer struct {
 }
 
 // agentExtractor 记录某个 agent 当前正在抽取的工具名与抽取器实例。
-// 工具名用于检测"新的工具调用开始了"，避免缓存被上一轮残留污染。
+// 工具名用于检测"Lượt gọi tool mới bắt đầu"，避免缓存被上一轮残留污染。
 type agentExtractor struct {
 	tool       string
 	ext        *jsonFieldExtractor
@@ -116,7 +116,7 @@ func newObserver(s *storepkg.Store, emitEv func(Event), emitD func(string), emit
 //     由 handleToolUpdate 统一处理 TOOL/流式正文/thinking/retry/context
 //     (TOOL 行/流式正文/thinking/retry/context)。
 
-// dispatchStart 记录一次 Worker 派发开始并发 DISPATCH 行。
+// dispatchStart 记录一次 Worker 派发Bắt đầu并发 DISPATCH 行。
 func (o *observer) dispatchStart(agent, task string) {
 	summary := dispatchSummary(agent, task)
 	o.updateAgent(agent, func(a *agentState) {
@@ -172,7 +172,7 @@ func (o *observer) finalize() {
 }
 
 // setAborting 由 Host 在 Abort/Close/Start 等生命周期切换处调用，控制
-// "context canceled" 类衍生事件是否需要抑制（避免与"用户手动暂停"重复）。
+// "context canceled" 类衍生事件是否需要抑制（避免与"Người dùng tạm dừng thủ công"重复）。
 func (o *observer) setAborting(v bool) { o.aborting.Store(v) }
 
 func (o *observer) retryEventID(scope string, attempt int) string {
@@ -188,8 +188,8 @@ func (o *observer) retryEventID(scope string, attempt int) string {
 	return o.retryEvents[scope]
 }
 
-// emitAndLog 用于调用类事件的"开始"态：发给 TUI 但不写入 runtime queue，
-// 避免 replay 时"开始一行、完成又一行"重复。slog 由 host.emitEvent 统一记录。
+// emitAndLog 用于调用类事件的"Bắt đầu"态：发给 TUI 但不写入 runtime queue，
+// 避免 replay 时"Bắt đầu một dòng, hoàn tất một dòng khác"重复。slog 由 host.emitEvent 统一记录。
 func (o *observer) emitAndLog(ev Event) {
 	o.emitEv(ev)
 }
@@ -212,7 +212,7 @@ func (o *observer) persistEvent(ev Event) {
 		Summary:  ev.Summary,
 		Payload:  ev,
 	}); err != nil {
-		slog.Warn("运行事件持久化失败", "module", "observer", "category", ev.Category, "err", err)
+		slog.Warn("Lưu sự kiện chạy thất bại", "module", "observer", "category", ev.Category, "err", err)
 	}
 }
 

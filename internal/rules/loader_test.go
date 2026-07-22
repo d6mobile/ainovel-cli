@@ -20,8 +20,8 @@ func TestEnsureRulesDirAt(t *testing.T) {
 		t.Fatalf("README.txt should be written: %v", err)
 	}
 	// 砍 YAML 后引导改讲"大白话 + 自动归一化"，不再教 front matter。
-	if !strings.Contains(string(data), "归一化") {
-		t.Errorf("README.txt 应说明自然语言会被归一化，got %q", data)
+	if !strings.Contains(string(data), "chuẩn hóa") {
+		t.Errorf("README.txt phải nói rằng ngôn ngữ tự nhiên sẽ được chuẩn hóa, got %q", data)
 	}
 	if strings.Contains(string(data), "front matter") {
 		t.Errorf("README.txt 不应再教 YAML front matter，got %q", data)

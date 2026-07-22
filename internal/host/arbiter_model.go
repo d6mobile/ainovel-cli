@@ -28,7 +28,7 @@ func newUsageTrackedModel(inner agentcore.ChatModel, agentName string, record fu
 }
 
 // capabilityUsageTrackedModel 保留底层模型的可选能力接口。包装器不能把
-// "不支持 thinking" 擦成 "能力未知"，否则上层会生成 provider 不接受的参数。
+// "không hỗ trợ thinking" 擦成 "chưa rõ năng lực"，否则上层会生成 provider 不接受的参数。
 type capabilityUsageTrackedModel struct {
 	*usageTrackedModel
 	capabilities llm.CapabilityProvider

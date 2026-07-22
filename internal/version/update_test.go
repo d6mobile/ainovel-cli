@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -81,6 +82,29 @@ func TestVerifyChecksum(t *testing.T) {
 	}
 	if err := verifyChecksum(archive, checksums, filepath.Base(archive)); err == nil {
 		t.Fatal("tampered archive should fail checksum verification")
+	}
+}
+
+func TestVerifyChecksumReportsVietnameseErrors(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "ainovel-cli_1.2.3_Linux_x86_64.tar.gz")
+	if err := os.WriteFile(archive, []byte("release archive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	checksums := filepath.Join(dir, "checksums.txt")
+	if err := os.WriteFile(checksums, []byte("abcd  other.tar.gz\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyChecksum(archive, checksums, filepath.Base(archive)); err == nil || !strings.Contains(err.Error(), "không tìm thấy") {
+		t.Fatalf("expected Vietnamese missing manifest entry, got %v", err)
+	}
+
+	wrong := fmt.Sprintf("%064x  %s\n", 0, filepath.Base(archive))
+	if err := os.WriteFile(checksums, []byte(wrong), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyChecksum(archive, checksums, filepath.Base(archive)); err == nil || !strings.Contains(err.Error(), "kiểm tra SHA256 thất bại") {
+		t.Fatalf("expected Vietnamese checksum failure, got %v", err)
 	}
 }
 

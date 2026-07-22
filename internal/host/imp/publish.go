@@ -97,7 +97,7 @@ func publishFoundation(st *store.Store, f *Foundation) error {
 		return fmt.Errorf("load progress：%w", err)
 	}
 	if p == nil {
-		return fmt.Errorf("load progress：progress 未初始化")
+		return fmt.Errorf("load progress: progress chưa được khởi tạo")
 	}
 	if p.Phase != domain.PhaseWriting && p.Phase != domain.PhaseComplete {
 		if err := st.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
@@ -110,36 +110,36 @@ func publishFoundation(st *store.Store, f *Foundation) error {
 // checkFoundationConflicts 校验待发布 Foundation 与既有正式工件的一致性：
 // 既有为空视为首次发布；相同视为幂等；不同则报冲突不覆盖（RFC §12.2 / 不变量 6）。
 // compass 与扁平大纲由分层大纲派生，分层一致即派生一致，故只查四个源工件。
-// 读错误不得吞成"文件不存在"：store 加载器对缺失返回 (零值, nil)，故任何非 nil 都是真实错误
+// 读错误不得吞成"file không tồn tại"：store 加载器对缺失返回 (零值, nil)，故任何非 nil 都是真实错误
 // （损坏/权限/JSON 非法），若当作空值继续会覆盖无法读取的正式工件（RFC §12.2）。
 func checkFoundationConflicts(st *store.Store, f *Foundation) error {
 	cur, err := st.Outline.LoadPremise()
 	if err != nil {
-		return fmt.Errorf("读取正式 premise：%w", err)
+		return fmt.Errorf("đọc premise chính thức: %w", err)
 	}
 	if cur != "" && cur != f.Premise {
-		return fmt.Errorf("正式 premise 与导入综合冲突（已存在不同版本），拒绝覆盖")
+		return fmt.Errorf("premise chính thức xung đột với tổng hợp nhập (đã có phiên bản khác), từ chối ghi đè")
 	}
 	chars, err := st.Characters.Load()
 	if err != nil {
-		return fmt.Errorf("读取正式 characters：%w", err)
+		return fmt.Errorf("đọc characters chính thức: %w", err)
 	}
 	if len(chars) > 0 && !jsonEqual(chars, f.Characters) {
-		return fmt.Errorf("正式 characters 与导入综合冲突（已存在不同版本），拒绝覆盖")
+		return fmt.Errorf("characters chính thức xung đột với tổng hợp nhập (đã có phiên bản khác), từ chối ghi đè")
 	}
 	rules, err := st.World.LoadWorldRules()
 	if err != nil {
-		return fmt.Errorf("读取正式 world_rules：%w", err)
+		return fmt.Errorf("đọc world_rules chính thức: %w", err)
 	}
 	if len(rules) > 0 && !jsonEqual(rules, f.WorldRules) {
-		return fmt.Errorf("正式 world_rules 与导入综合冲突（已存在不同版本），拒绝覆盖")
+		return fmt.Errorf("world_rules chính thức xung đột với tổng hợp nhập (đã có phiên bản khác), từ chối ghi đè")
 	}
 	layered, err := st.Outline.LoadLayeredOutline()
 	if err != nil {
-		return fmt.Errorf("读取正式 layered_outline：%w", err)
+		return fmt.Errorf("đọc layered_outline chính thức: %w", err)
 	}
 	if len(layered) > 0 && !jsonEqual(layered, f.Volumes) {
-		return fmt.Errorf("正式 layered_outline 与导入综合冲突（已存在不同版本），拒绝覆盖")
+		return fmt.Errorf("layered_outline chính thức xung đột với tổng hợp nhập (đã có phiên bản khác), từ chối ghi đè")
 	}
 	return nil
 }
@@ -229,21 +229,21 @@ func isPublished(st *store.Store, expected int) (bool, error) {
 	}
 	p, err := st.Outline.LoadPremise()
 	if err != nil {
-		return false, fmt.Errorf("读取正式 premise: %w", err)
+		return false, fmt.Errorf("đọc premise chính thức: %w", err)
 	}
 	if p == "" {
 		return false, nil
 	}
 	o, err := st.Outline.LoadOutline()
 	if err != nil {
-		return false, fmt.Errorf("读取正式 outline: %w", err)
+		return false, fmt.Errorf("đọc outline chính thức: %w", err)
 	}
 	if len(o) < expected {
 		return false, nil
 	}
 	prog, err := st.Progress.Load()
 	if err != nil {
-		return false, fmt.Errorf("读取正式 progress: %w", err)
+		return false, fmt.Errorf("đọc progress chính thức: %w", err)
 	}
 	return prog != nil && len(prog.CompletedChapters) >= expected, nil
 }

@@ -34,21 +34,21 @@ type FailureDecision struct {
 
 func (d *FailureDecision) ValidateAgainst(f FailureFacts) error {
 	if strings.TrimSpace(d.Reason) == "" {
-		return fmt.Errorf("reason 不能为空")
+		return fmt.Errorf("reason không được để trống")
 	}
 	switch d.Action {
 	case "retry", "abort":
 		return nil
 	case "reroute":
 		if d.Dispatch == nil {
-			return fmt.Errorf("reroute 必须附 dispatch")
+			return fmt.Errorf("reroute phải đi kèm dispatch")
 		}
 		if err := d.Dispatch.validate(); err != nil {
 			return err
 		}
 		return validateDispatchAgainst(d.Dispatch, f.Phase)
 	default:
-		return fmt.Errorf("action 非法: %q（可选 retry / reroute / abort）", d.Action)
+		return fmt.Errorf("action không hợp lệ: %q (chọn retry / reroute / abort)", d.Action)
 	}
 }
 

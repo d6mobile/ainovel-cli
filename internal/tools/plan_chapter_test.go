@@ -10,6 +10,16 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
+func TestEnsureChapterExpandedRequiresStoreInVietnamese(t *testing.T) {
+	err := EnsureChapterExpanded(nil, 1)
+	if err == nil {
+		t.Fatal("expected nil store to fail")
+	}
+	if !strings.Contains(err.Error(), "store không được để trống") {
+		t.Fatalf("expected Vietnamese store precondition, got %v", err)
+	}
+}
+
 func planArgs(chapter int) json.RawMessage {
 	b, _ := json.Marshal(map[string]any{
 		"chapter":     chapter,

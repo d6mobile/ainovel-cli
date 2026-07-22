@@ -1,10 +1,22 @@
 package store
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
 )
+
+func TestStartChapterRequiresInitializedProgressInVietnamese(t *testing.T) {
+	store := NewStore(t.TempDir())
+	err := store.Progress.StartChapter(1)
+	if err == nil {
+		t.Fatal("expected missing progress to fail")
+	}
+	if !strings.Contains(err.Error(), "progress chưa được khởi tạo") {
+		t.Fatalf("expected Vietnamese progress precondition, got %v", err)
+	}
+}
 
 func TestSetFlow(t *testing.T) {
 	dir := t.TempDir()

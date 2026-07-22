@@ -713,11 +713,11 @@ func (t *CommitChapterTool) validateRewriteDraft(chapter int, progress *domain.P
 	if existingFinal == "" || existingFinal != content {
 		return content, nil
 	}
-	mode := "重写"
+	mode := "sửa lại"
 	if progress != nil && progress.Flow == domain.FlowPolishing {
-		mode = "打磨"
+		mode = "trau chuốt"
 	}
-	return "", fmt.Errorf("第 %d 章 drafts 与 chapters 内容完全相同，未检测到%s改动。请先调 draft_chapter(mode=write, chapter=%d) 写入%s后的新正文，再 commit_chapter: %w",
+	return "", fmt.Errorf("Nội dung drafts và chapters của chương %d hoàn toàn giống nhau, chưa phát hiện thay đổi sau khi %s. Hãy gọi draft_chapter(mode=write, chapter=%d) để ghi bản mới sau khi %s, rồi mới commit_chapter: %w",
 		chapter, mode, chapter, mode, errs.ErrToolPrecondition)
 }
 

@@ -118,7 +118,7 @@ func (p *WriterRestorePack) Refresh(s *store.Store) {
 	}
 	progress, err := s.Progress.Load()
 	if err != nil {
-		p.setWarning("progress 读取失败", err)
+		p.setWarning("Không đọc được progress", err)
 		return
 	}
 	if progress == nil {
@@ -136,7 +136,7 @@ func (p *WriterRestorePack) Refresh(s *store.Store) {
 
 	text, ok, err := buildWriterRestoreText(s, restoreBudgetTokens)
 	if err != nil {
-		p.setWarning("恢复上下文读取失败", err)
+		p.setWarning("Không đọc được ngữ cảnh khôi phục", err)
 		return
 	}
 	if !ok {

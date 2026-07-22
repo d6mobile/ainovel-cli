@@ -267,7 +267,7 @@ func compactFoundationArgs(tc *agentcore.ToolCall) *agentcore.ToolCall {
 	if json.Unmarshal(args["type"], &t) == nil && t != "" {
 		typeName = t
 	}
-	placeholder := fmt.Sprintf("[session_compact: %s %dB | 见 store]", typeName, len(contentRaw))
+	placeholder := fmt.Sprintf("[session_compact: %s %dB | xem store]", typeName, len(contentRaw))
 	args["content"], _ = json.Marshal(placeholder)
 	clone := *tc
 	clone.Args, _ = json.Marshal(args)

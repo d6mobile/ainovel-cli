@@ -60,7 +60,7 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 		var warnings []string
 		warn := func(scope string, err error) {
 			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("%s 读取失败: %v", scope, err))
+				warnings = append(warnings, fmt.Sprintf("đọc %s thất bại: %v", scope, err))
 			}
 		}
 		chars, err := t.store.Characters.Load()

@@ -502,7 +502,7 @@ func (h *Host) doIntervention(text string, restart bool) error {
 
 	facts, err := arbiter.CollectInterventionFacts(h.store)
 	if err != nil {
-		wrapped := fmt.Errorf("收集干预事实失败，未调用 Arbiter: %w", err)
+		wrapped := fmt.Errorf("Thu thập dữ kiện can thiệp thất bại, chưa gọi Arbiter: %w", err)
 		h.emitEvent(Event{Time: time.Now(), Category: "ERROR", Agent: "arbiter",
 			Summary: wrapped.Error(), Detail: wrapped.Error(), Level: "error"})
 		return wrapped
@@ -785,7 +785,7 @@ func (h *Host) Close() {
 		}
 		h.usage.WaitAutoSave()
 		if err := h.usage.SaveNow(); err != nil {
-			slog.Warn("usage 退出前落盘失败", "module", "usage", "err", err)
+			slog.Warn("Lưu usage trước khi thoát thất bại", "module", "usage", "err", err)
 		}
 		close(h.done)
 		close(h.events)
@@ -805,7 +805,7 @@ func (h *Host) runEnded() {
 		}
 		h.mu.Unlock()
 		h.emitEvent(Event{Time: time.Now(), Category: "ERROR", Level: "error",
-			Summary: "引擎结束时读取进度失败: " + err.Error()})
+			Summary: "Đọc progress khi engine kết thúc thất bại: " + err.Error()})
 		select {
 		case h.done <- struct{}{}:
 		default:
@@ -1626,9 +1626,9 @@ func (h *Host) continueAfterImport(opts imp.Options) bool {
 	if !want {
 		in, err := imp.OpenWorkspace(h.store.Dir()).LoadIntent()
 		if err != nil {
-			slog.Warn("导入自动接力读取 Intent 失败", "module", "host", "err", err)
+			slog.Warn("Đọc Intent để tự nối tiếp sau nhập thất bại", "module", "host", "err", err)
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",
-				Summary: "导入已完成，但自动接力意图读取失败：" + err.Error()})
+				Summary: "Nhập đã hoàn tất, nhưng đọc intent tự nối tiếp thất bại: " + err.Error()})
 		} else if in != nil {
 			want = in.ContinueAfterImport
 		}

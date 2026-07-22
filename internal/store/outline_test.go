@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
@@ -24,6 +25,21 @@ func setupLayered(t *testing.T, volumes []domain.VolumeOutline) *Store {
 		t.Fatalf("SetLayered: %v", err)
 	}
 	return s
+}
+
+func TestRenderLayeredOutlineUsesVietnameseLabels(t *testing.T) {
+	out := renderLayeredOutline([]domain.VolumeOutline{{
+		Index: 1, Title: "Tập một", Theme: "Chủ đề thử nghiệm",
+		Arcs: []domain.ArcOutline{{
+			Index: 1, Title: "Cung một", Goal: "Mục tiêu thử nghiệm",
+			Chapters: []domain.OutlineEntry{{Title: "Chương một", CoreEvent: "Sự kiện chính", Hook: "Móc nối"}},
+		}},
+	}})
+	for _, want := range []string{"# Dàn ý phân tầng", "**Chủ đề**", "**Mục tiêu**"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("renderLayeredOutline thiếu nhãn %q:\n%s", want, out)
+		}
+	}
 }
 
 func TestCheckArcBoundaryNeedsNewVolume(t *testing.T) {

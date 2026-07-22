@@ -59,7 +59,7 @@ func (g *ChapterAdvanceGate) HandleBoundary() bool {
 func (g *ChapterAdvanceGate) handleHold(hold domain.AdvanceHold) bool {
 	progress, err := g.store.Progress.Load()
 	if err != nil {
-		return g.fail(fmt.Errorf("读取 Progress 解析一次性暂停: %w", err))
+		return g.fail(fmt.Errorf("Đọc Progress để phân giải tạm dừng một lần: %w", err))
 	}
 	resolution, err := flow.ResolveAdvanceHold(&hold, progress)
 	if err != nil {
@@ -70,22 +70,22 @@ func (g *ChapterAdvanceGate) handleHold(hold domain.AdvanceHold) bool {
 		return false
 	case flow.AdvanceHoldConsume:
 		if err := g.store.RunMeta.ClearAdvanceHold(hold); err != nil {
-			return g.fail(fmt.Errorf("消费一次性暂停: %w", err))
+			return g.fail(fmt.Errorf("tiêu thụ tạm dừng một lần: %w", err))
 		}
-		g.reportEvent("info", withAdvanceReason("全书已完结，一次性暂停意图已解除", hold.Reason))
+		g.reportEvent("info", withAdvanceReason("Toàn truyện đã hoàn tất, ý định tạm dừng một lần đã được gỡ", hold.Reason))
 		return false
 	case flow.AdvanceHoldConsumeAndStop:
 		if err := g.store.RunMeta.ClearAdvanceHold(hold); err != nil {
-			return g.fail(fmt.Errorf("消费一次性暂停: %w", err))
+			return g.fail(fmt.Errorf("tiêu thụ tạm dừng một lần: %w", err))
 		}
-		msg := "已按用户要求在当前工作边界暂停"
+		msg := "Đã tạm dừng tại ranh giới công việc hiện tại theo yêu cầu người dùng"
 		if hold.After == domain.AdvanceHoldAfterRewritesDrained {
-			msg = "返工队列已排空，已暂停等待验收"
+			msg = "Hàng đợi làm lại đã trống, đã tạm dừng chờ nghiệm thu"
 		}
 		g.pauseNow(withAdvanceReason(msg, hold.Reason))
 		return true
 	default:
-		return g.fail(fmt.Errorf("未知一次性暂停解析结果 %d", resolution))
+		return g.fail(fmt.Errorf("kết quả phân giải tạm dừng một lần chưa biết %d", resolution))
 	}
 }
 
@@ -203,5 +203,5 @@ func withAdvanceReason(msg, reason string) string {
 	if reason == "" {
 		return msg
 	}
-	return msg + "（诉求：" + reason + "）"
+	return msg + " (yêu cầu: " + reason + ")"
 }

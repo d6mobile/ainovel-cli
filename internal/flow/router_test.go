@@ -108,7 +108,7 @@ func TestRoute_ArcEndNeedsReview(t *testing.T) {
 	if got == nil || got.Agent != "editor" {
 		t.Fatalf("expected editor for arc review, got %+v", got)
 	}
-	if got.Reason != "弧末评审未完成" {
+	if got.Reason != "Chưa hoàn tất đánh giá cuối cung" {
 		t.Errorf("reason mismatch: %q", got.Reason)
 	}
 }
@@ -126,7 +126,7 @@ func TestRoute_ArcEndHasReviewNeedsSummary(t *testing.T) {
 		HasArcReview: true,
 	}
 	got := Route(s)
-	if got == nil || got.Agent != "editor" || got.Reason != "弧摘要未完成" {
+	if got == nil || got.Agent != "editor" || got.Reason != "Chưa hoàn tất tóm tắt cung" {
 		t.Fatalf("expected arc summary editor call, got %+v", got)
 	}
 }
@@ -146,7 +146,7 @@ func TestRoute_VolumeEndNeedsVolumeSummary(t *testing.T) {
 		HasArcSummary: true,
 	}
 	got := Route(s)
-	if got == nil || got.Reason != "卷摘要未完成" {
+	if got == nil || got.Reason != "Chưa hoàn tất tóm tắt tập" {
 		t.Fatalf("expected volume summary request, got %+v", got)
 	}
 }
@@ -171,7 +171,7 @@ func TestRoute_NeedsArcExpansion(t *testing.T) {
 	if got == nil || got.Agent != "architect_long" {
 		t.Fatalf("expected architect_long for expansion, got %+v", got)
 	}
-	if got.Reason != "下一弧骨架待展开" {
+	if got.Reason != "Khung cung tiếp theo đang chờ mở rộng" {
 		t.Errorf("reason mismatch: %q", got.Reason)
 	}
 }
@@ -193,7 +193,7 @@ func TestRoute_NeedsNewVolume(t *testing.T) {
 		HasVolumeSummary: true,
 	}
 	got := Route(s)
-	if got == nil || got.Agent != "architect_long" || got.Reason != "卷末需决定追加新卷、收官卷或结束全书" {
+	if got == nil || got.Agent != "architect_long" || got.Reason != "Cuối tập cần quyết định thêm tập mới, tập kết hoặc kết thúc toàn truyện" {
 		t.Fatalf("expected append_volume/complete_book dispatch, got %+v", got)
 	}
 }
@@ -261,7 +261,7 @@ func TestRoute_PlanningFillDispatchesSamePlanner(t *testing.T) {
 	if got == nil || got.Agent != "architect_long" {
 		t.Fatalf("long tier 应续派 architect_long,got %+v", got)
 	}
-	for _, want := range []string{"补齐基础设定", "characters", "world_rules", "save_foundation"} {
+	for _, want := range []string{"Bổ sung thiếu sót trong thiết lập nền tảng", "characters", "world_rules", "save_foundation"} {
 		if !contains(got.Task, want) {
 			t.Errorf("补齐任务缺少 %q: %s", want, got.Task)
 		}

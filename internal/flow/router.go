@@ -96,8 +96,8 @@ func Route(s State) *Instruction {
 		if len(s.FoundationMissing) > 0 && s.PlanningTier != "" {
 			return &Instruction{
 				Agent:  plannerForTier(s.PlanningTier),
-				Task:   fmt.Sprintf("补齐基础设定缺项：%s（用 save_foundation 落盘对应 type，全部就绪后 foundation_ready=true）", strings.Join(s.FoundationMissing, "、")),
-				Reason: "基础设定缺项未齐，照缺项续派同一规划师",
+				Task:   fmt.Sprintf("Bổ sung thiếu sót trong thiết lập nền tảng: %s (dùng save_foundation để lưu type tương ứng; khi mọi thứ sẵn sàng, đặt foundation_ready=true)", strings.Join(s.FoundationMissing, "、")),
+				Reason: "Thiết lập nền tảng còn thiếu, tiếp tục giao cùng planner theo các mục thiếu",
 			}
 		}
 		return nil
@@ -138,32 +138,32 @@ func Route(s State) *Instruction {
 		case !s.HasArcReview:
 			return &Instruction{
 				Agent:  "editor",
-				Task:   fmt.Sprintf("对第 %d 卷第 %d 弧做弧级评审（scope=arc）", b.Volume, b.Arc),
-				Reason: "弧末评审未完成",
+				Task:   fmt.Sprintf("Đánh giá cấp cung cho tập %d cung %d (scope=arc)", b.Volume, b.Arc),
+				Reason: "Chưa hoàn tất đánh giá cuối cung",
 			}
 		case !s.HasArcSummary:
 			return &Instruction{
 				Agent:  "editor",
-				Task:   fmt.Sprintf("生成第 %d 卷第 %d 弧摘要（save_arc_summary）", b.Volume, b.Arc),
-				Reason: "弧摘要未完成",
+				Task:   fmt.Sprintf("Tạo tóm tắt tập %d cung %d (save_arc_summary)", b.Volume, b.Arc),
+				Reason: "Chưa hoàn tất tóm tắt cung",
 			}
 		case b.IsVolumeEnd && !s.HasVolumeSummary:
 			return &Instruction{
 				Agent:  "editor",
-				Task:   fmt.Sprintf("生成第 %d 卷卷摘要（save_volume_summary）", b.Volume),
-				Reason: "卷摘要未完成",
+				Task:   fmt.Sprintf("Tạo tóm tắt tập %d (save_volume_summary)", b.Volume),
+				Reason: "Chưa hoàn tất tóm tắt tập",
 			}
 		case b.NeedsExpansion && b.NextArc > 0:
 			return &Instruction{
 				Agent:  "architect_long",
-				Task:   fmt.Sprintf("展开第 %d 卷第 %d 弧（save_foundation type=expand_arc）", b.NextVolume, b.NextArc),
-				Reason: "下一弧骨架待展开",
+				Task:   fmt.Sprintf("Mở rộng tập %d cung %d (save_foundation type=expand_arc)", b.NextVolume, b.NextArc),
+				Reason: "Khung cung tiếp theo đang chờ mở rộng",
 			}
 		case b.NeedsNewVolume:
 			return &Instruction{
 				Agent:  "architect_long",
-				Task:   "创建下一卷：按完结判定清单评估后调用 save_foundation——故事继续 → type=append_volume；故事接近终点 → type=append_volume 且卷 JSON 顶层带 \"final\": true（收官卷，整卷收线，写完自动完结）；全部完结条件当下已满足 → type=complete_book。三选一均须附 reason 参数写明判定理由",
-				Reason: "卷末需决定追加新卷、收官卷或结束全书",
+				Task:   "Tạo tập tiếp theo: sau khi đánh giá theo checklist kết thúc, gọi save_foundation — truyện tiếp tục → type=append_volume; truyện gần hồi kết → type=append_volume và JSON cấp tập có \"final\": true ở top-level (tập kết, thu toàn bộ tuyến trong tập, viết xong sẽ tự kết thúc); mọi điều kiện kết thúc hiện đã thỏa mãn → type=complete_book. Trong cả ba lựa chọn đều phải kèm tham số reason nêu rõ lý do phán định",
+				Reason: "Cuối tập cần quyết định thêm tập mới, tập kết hoặc kết thúc toàn truyện",
 			}
 		}
 	}
@@ -175,7 +175,7 @@ func Route(s State) *Instruction {
 		if due, reason := domain.ShouldReview(len(p.CompletedChapters)); due && !s.HasGlobalReview {
 			return &Instruction{
 				Agent:  "editor",
-				Task:   fmt.Sprintf("对前 %d 章做全局审阅（save_review scope=global, chapter=%d）", s.LastCompleted, s.LastCompleted),
+				Task:   fmt.Sprintf("Đánh giá toàn cục %d chương đầu (save_review scope=global, chapter=%d)", s.LastCompleted, s.LastCompleted),
 				Reason: reason,
 			}
 		}

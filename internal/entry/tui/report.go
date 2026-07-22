@@ -91,7 +91,7 @@ func renderReportText(report diag.Report, width int, exportPath string, exportEr
 		b.WriteString(dimStyle.Render(wrapText(exportPath, width)))
 		b.WriteString("\n\n")
 	} else if exportErr != nil {
-		b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("脱敏诊断导出失败：" + exportErr.Error()))
+		b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("Xuất chẩn đoán ẩn danh thất bại: " + exportErr.Error()))
 		b.WriteString("\n\n")
 	}
 

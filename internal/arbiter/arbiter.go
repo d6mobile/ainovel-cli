@@ -38,14 +38,14 @@ const modelMaxRetries = 7
 
 const maxRetryDelay = 60 * time.Second
 
-const retryHint = "上面的输出不是合法的 JSON 或缺少必填字段。请只输出一个符合约定 schema 的 JSON 对象，不要任何解释文字、不要 Markdown 代码围栏。"
+const retryHint = "Đầu ra phía trên không phải JSON hợp lệ hoặc thiếu trường bắt buộc. Chỉ xuất một đối tượng JSON phù hợp với schema đã quy ước, không thêm bất kỳ lời giải thích nào, không bọc Markdown code fence."
 
 // decide 是所有场景共用的 LLM 调用内核:system 提示词 + 用户负载 → 解析进 T →
 // Validate;非法输出带反馈重问。除模型调用外无任何 IO。
 func decide[T any](ctx context.Context, model agentcore.ChatModel, systemPrompt, payload string, validate func(*T) error) (T, error) {
 	var zero T
 	if model == nil {
-		return zero, fmt.Errorf("arbiter: model 未配置")
+		return zero, fmt.Errorf("arbiter: model chưa được cấu hình")
 	}
 
 	messages := []agentcore.Message{
@@ -60,12 +60,12 @@ func decide[T any](ctx context.Context, model agentcore.ChatModel, systemPrompt,
 		resp, err := generateWithRetry(ctx, model, messages,
 			agentcore.WithMaxTokens(decideMaxTokens))
 		if err != nil {
-			return zero, fmt.Errorf("arbiter: 模型调用失败: %w", err)
+			return zero, fmt.Errorf("arbiter: gọi model thất bại: %w", err)
 		}
 		var raw string
 		switch {
 		case resp == nil:
-			lastErr = fmt.Errorf("模型返回空响应")
+			lastErr = fmt.Errorf("model trả về phản hồi rỗng")
 		default:
 			raw = resp.Message.TextContent()
 			var out T
@@ -80,20 +80,20 @@ func decide[T any](ctx context.Context, model agentcore.ChatModel, systemPrompt,
 					lastErr = uerr
 				}
 			} else {
-				lastErr = fmt.Errorf("输出中未找到 JSON")
+				lastErr = fmt.Errorf("không tìm thấy JSON trong đầu ra")
 			}
 			// 反馈式重试:把非法输出与纠正提示并入对话(仅格式/校验失败有反馈可给)。
 			messages = append(messages,
 				agentcore.Message{Role: agentcore.RoleAssistant, Content: []agentcore.ContentBlock{agentcore.TextBlock(raw)}},
-				agentcore.Message{Role: agentcore.RoleUser, Content: []agentcore.ContentBlock{agentcore.TextBlock(retryHint + "\n错误：" + lastErr.Error())}},
+				agentcore.Message{Role: agentcore.RoleUser, Content: []agentcore.ContentBlock{agentcore.TextBlock(retryHint + "\nLỗi: " + lastErr.Error())}},
 			)
 		}
-		slog.Warn("裁定尝试失败", "module", "arbiter", "attempt", attempt, "err", lastErr)
+		slog.Warn("Thử phân xử thất bại", "module", "arbiter", "attempt", attempt, "err", lastErr)
 		if ctx.Err() != nil {
 			break
 		}
 	}
-	return zero, fmt.Errorf("arbiter: 裁定失败（%d 次尝试）: %w", decideMaxAttempts, lastErr)
+	return zero, fmt.Errorf("arbiter: phân xử thất bại (%d lần thử): %w", decideMaxAttempts, lastErr)
 }
 
 // generateWithRetry 为 Arbiter 接上与 Worker 相同的请求层重试语义：仅重试模型适配器
@@ -212,10 +212,10 @@ func (d *DispatchOp) validate() error {
 		return nil
 	}
 	if !knownWorkers[d.Agent] {
-		return fmt.Errorf("dispatch.agent 非法: %q", d.Agent)
+		return fmt.Errorf("dispatch.agent không hợp lệ: %q", d.Agent)
 	}
 	if strings.TrimSpace(d.Task) == "" {
-		return fmt.Errorf("dispatch.task 不能为空")
+		return fmt.Errorf("dispatch.task không được để trống")
 	}
 	return nil
 }

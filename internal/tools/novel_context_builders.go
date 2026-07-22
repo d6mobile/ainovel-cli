@@ -416,7 +416,7 @@ func (t *ContextTool) buildChapterWorkingMemory(envelope *chapterContextEnvelope
 		if volumes, err := t.store.Outline.LoadLayeredOutline(); err == nil {
 			if fv := domain.FinaleVolume(volumes); fv > 0 {
 				if b, berr := t.store.Outline.CheckArcBoundary(state.chapter); berr == nil && b != nil && b.Volume == fv {
-					envelope.Working["finale"] = "本卷为全书收官卷：不再新开长线或埋新伏笔，优先回收既有伏笔、收拢关系线，按大纲把故事推向终局。"
+					envelope.Working["finale"] = "Tập này là tập kết toàn truyện: không mở tuyến dài mới hoặc gieo phục bút mới; ưu tiên thu hồi phục bút hiện có, khép các tuyến quan hệ và đẩy câu chuyện tới hồi kết theo dàn ý."
 				}
 			}
 		}

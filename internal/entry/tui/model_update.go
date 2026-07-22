@@ -585,7 +585,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		} else if msg.err != nil {
 			m.modelConfig.message = msg.err.Error()
 		} else {
-			m.modelConfig.message = "连接测试成功：" + msg.model
+			m.modelConfig.message = "Kiểm tra kết nối thành công: " + msg.model
 		}
 		return m, nil, true
 	case startResultMsg:

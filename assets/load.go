@@ -205,7 +205,7 @@ func WithSimulationGuidance(prompt, role string) string {
 func (b *Bundle) OverridePrompt(file, raw string) error {
 	role, ok := promptRole[file]
 	if !ok {
-		return fmt.Errorf("不支持覆盖的 prompt 文件: %s（仅核心提示词可覆盖）", file)
+		return fmt.Errorf("Không hỗ trợ ghi đè file prompt: %s (chỉ có thể ghi đè prompt lõi)", file)
 	}
 	wrapped := WithSimulationGuidance(raw, role)
 	switch file {
@@ -275,7 +275,7 @@ func overlayStyles(styles map[string]string, dir string) {
 		}
 		name := strings.TrimSuffix(e.Name(), ".md")
 		if !styleNameRe.MatchString(name) {
-			slog.Warn("忽略非法风格文件名", "module", "assets", "dir", dir, "file", e.Name())
+			slog.Warn("Bỏ qua tên file phong cách không hợp lệ", "module", "assets", "dir", dir, "file", e.Name())
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, "styles", e.Name()))

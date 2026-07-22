@@ -150,7 +150,7 @@ func selectAsset(rel *release, binaryName string) (releaseAsset, error) {
 			}
 		}
 	}
-	return releaseAsset{}, fmt.Errorf("release %s 未找到当前平台的精确安装包 %s_<version>%s", rel.TagName, binaryName, suffix)
+	return releaseAsset{}, fmt.Errorf("release %s không tìm thấy gói cài đặt chính xác cho nền tảng hiện tại %s_<version>%s", rel.TagName, binaryName, suffix)
 }
 
 func selectChecksumAsset(rel *release, binaryName string) (releaseAsset, error) {
@@ -233,10 +233,10 @@ func verifyChecksum(archivePath, checksumPath, assetName string) error {
 		}
 	}
 	if expected == "" {
-		return fmt.Errorf("checksum 清单中未找到 %s", assetName)
+		return fmt.Errorf("không tìm thấy %s trong manifest checksum", assetName)
 	}
 	if len(expected) != sha256.Size*2 {
-		return fmt.Errorf("%s 的 SHA256 格式非法", assetName)
+		return fmt.Errorf("định dạng SHA256 của %s không hợp lệ", assetName)
 	}
 	f, err := os.Open(archivePath)
 	if err != nil {
@@ -249,7 +249,7 @@ func verifyChecksum(archivePath, checksumPath, assetName string) error {
 	}
 	actual := fmt.Sprintf("%x", h.Sum(nil))
 	if actual != expected {
-		return fmt.Errorf("%s SHA256 校验失败：got %s, expected %s", assetName, actual, expected)
+		return fmt.Errorf("%s kiểm tra SHA256 thất bại: got %s, expected %s", assetName, actual, expected)
 	}
 	return nil
 }

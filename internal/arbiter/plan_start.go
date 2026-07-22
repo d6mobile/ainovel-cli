@@ -17,13 +17,13 @@ type PlanStartDecision struct {
 
 func (d *PlanStartDecision) Validate() error {
 	if d.Planner != "architect_long" && d.Planner != "architect_short" {
-		return fmt.Errorf("planner 非法: %q（可选 architect_long / architect_short）", d.Planner)
+		return fmt.Errorf("planner không hợp lệ: %q (chọn architect_long / architect_short)", d.Planner)
 	}
 	if strings.TrimSpace(d.Task) == "" {
-		return fmt.Errorf("task 不能为空")
+		return fmt.Errorf("task không được để trống")
 	}
 	if strings.TrimSpace(d.Reason) == "" {
-		return fmt.Errorf("reason 不能为空")
+		return fmt.Errorf("reason không được để trống")
 	}
 	return nil
 }

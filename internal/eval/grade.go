@@ -74,14 +74,14 @@ func Grade(c Case, col Collected) Result {
 	// 1. 运行时错误：headless 返回 error 直接 hard fail（失败显式暴露）。
 	if col.RuntimeErr != "" {
 		r.HardFails = append(r.HardFails, Issue{
-			Kind: "hard_fail", Source: "runtime", Detail: "运行时错误: " + col.RuntimeErr,
+			Kind: "hard_fail", Source: "runtime", Detail: "Lỗi runtime: " + col.RuntimeErr,
 		})
 	}
 
 	// 1b. 工件读取失败：契约依赖的事实读不到，宁可 hard fail 也不 false pass（fail-loud）。
 	for _, le := range col.LoadErrors {
 		r.HardFails = append(r.HardFails, Issue{
-			Kind: "hard_fail", Source: "load", Detail: "工件读取失败: " + le,
+			Kind: "hard_fail", Source: "load", Detail: "Đọc artifact thất bại: " + le,
 		})
 	}
 
@@ -163,51 +163,51 @@ func GradeDelta(c Case, baseline, variant Result) Delta {
 	}
 
 	if baseline.Outcome == Fail {
-		note("baseline", "baseline 已失败，本轮 delta 只能作为参考")
+		note("baseline", "baseline đã thất bại, delta lượt này chỉ dùng để tham khảo")
 	}
 	if variant.Outcome == Fail {
-		hardFail("variant", "variant 自身门禁失败")
+		hardFail("variant", "variant tự thất bại ở cổng kiểm tra")
 	}
 	if d.Metrics.CriticalFindings > 0 {
-		hardFail("delta:critical_findings", fmt.Sprintf("critical findings 增加 %d", d.Metrics.CriticalFindings))
+		hardFail("delta:critical_findings", fmt.Sprintf("critical findings tăng %d", d.Metrics.CriticalFindings))
 	}
 	if variant.Metrics.CompletedChapters < baseline.Metrics.CompletedChapters {
-		hardFail("delta:completed_chapters", fmt.Sprintf("完成章节减少：baseline=%d variant=%d",
+		hardFail("delta:completed_chapters", fmt.Sprintf("Số chương hoàn tất giảm: baseline=%d variant=%d",
 			baseline.Metrics.CompletedChapters, variant.Metrics.CompletedChapters))
 	}
 	if d.Metrics.WarningFindings > 0 {
-		warn("delta:warning_findings", fmt.Sprintf("warning findings 增加 %d", d.Metrics.WarningFindings))
+		warn("delta:warning_findings", fmt.Sprintf("warning findings tăng %d", d.Metrics.WarningFindings))
 	}
 	if baseline.Metrics.TotalWords > 0 {
 		ratio := d.Metrics.TotalWordsRatio
 		if ratio > 0 && (ratio < 0.6 || ratio > 1.8) {
-			warn("delta:total_words", fmt.Sprintf("总字数比例 %.2f 超出 0.6~1.8", ratio))
+			warn("delta:total_words", fmt.Sprintf("Tỷ lệ tổng số chữ %.2f vượt ngoài 0.6~1.8", ratio))
 		}
 	}
 	if deltaGateEnabled(c.Gate.MaxToolCallDeltaRatio) && d.Metrics.ToolCallDeltaRatio > *c.Gate.MaxToolCallDeltaRatio {
-		warn("delta:tool_calls", fmt.Sprintf("tool calls 增幅 %.1f%% 超过阈值 %.1f%%",
+		warn("delta:tool_calls", fmt.Sprintf("tool calls tăng %.1f%% vượt ngưỡng %.1f%%",
 			d.Metrics.ToolCallDeltaRatio*100, *c.Gate.MaxToolCallDeltaRatio*100))
 	}
 	if deltaGateEnabled(c.Gate.MaxCostDeltaRatio) && d.Metrics.CostDeltaRatio > *c.Gate.MaxCostDeltaRatio {
-		warn("delta:cost", fmt.Sprintf("成本增幅 %.1f%% 超过阈值 %.1f%%",
+		warn("delta:cost", fmt.Sprintf("Chi phí tăng %.1f%% vượt ngưỡng %.1f%%",
 			d.Metrics.CostDeltaRatio*100, *c.Gate.MaxCostDeltaRatio*100))
 	}
 	if deltaGateEnabled(c.Gate.MaxCostDeltaRatio) && d.Metrics.InputTokenDeltaRatio > *c.Gate.MaxCostDeltaRatio {
-		warn("delta:input_tokens", fmt.Sprintf("输入 token 增幅 %.1f%% 超过阈值 %.1f%%",
+		warn("delta:input_tokens", fmt.Sprintf("Input token tăng %.1f%% vượt ngưỡng %.1f%%",
 			d.Metrics.InputTokenDeltaRatio*100, *c.Gate.MaxCostDeltaRatio*100))
 	}
 	if deltaGateEnabled(c.Gate.MaxCostDeltaRatio) && d.Metrics.OutputTokenDeltaRatio > *c.Gate.MaxCostDeltaRatio {
-		warn("delta:output_tokens", fmt.Sprintf("输出 token 增幅 %.1f%% 超过阈值 %.1f%%",
+		warn("delta:output_tokens", fmt.Sprintf("Output token tăng %.1f%% vượt ngưỡng %.1f%%",
 			d.Metrics.OutputTokenDeltaRatio*100, *c.Gate.MaxCostDeltaRatio*100))
 	}
 	if sd := d.Metrics.Stylestat; sd != nil {
 		if sd.Status == "insufficient_sample" {
-			note("stylestat", "样本不足，至少 5 章才计算文体回归")
+			note("stylestat", "Thiếu mẫu, cần ít nhất 5 chương để tính hồi quy văn phong")
 		} else if styleRegressed(sd) {
 			issue := Issue{
 				Kind:   "warning",
 				Source: "delta:stylestat",
-				Detail: fmt.Sprintf("文体指标回归：pattern_top %+0.1f，ending_short %+0.2f，repeated %+d，title_mixed %+d",
+				Detail: fmt.Sprintf("Chỉ số văn phong bị hồi quy: pattern_top %+0.1f, ending_short %+0.2f, repeated %+d, title_mixed %+d",
 					sd.PatternTopPerChapter, sd.EndingShortRatio, sd.RepeatedSentences, sd.TitleMixedDelta),
 			}
 			if c.Gate.StylestatRegression == "block" {
@@ -334,7 +334,7 @@ func gradeContracts(c Case, col Collected, r *Result) {
 	if e.Phase != "" {
 		got := phaseOf(col)
 		if got != e.Phase {
-			hardFail("phase", fmt.Sprintf("期望 phase=%s，实际 %s", e.Phase, got))
+			hardFail("phase", fmt.Sprintf("Kỳ vọng phase=%s, thực tế %s", e.Phase, got))
 		} else {
 			pass("phase", "phase="+got)
 		}
@@ -343,9 +343,9 @@ func gradeContracts(c Case, col Collected, r *Result) {
 	if e.MinCompletedChapters > 0 {
 		got := r.Metrics.CompletedChapters
 		if got < e.MinCompletedChapters {
-			hardFail("min_completed_chapters", fmt.Sprintf("期望 ≥%d 章，实际 %d 章", e.MinCompletedChapters, got))
+			hardFail("min_completed_chapters", fmt.Sprintf("Kỳ vọng ≥%d chương, thực tế %d chương", e.MinCompletedChapters, got))
 		} else {
-			pass("min_completed_chapters", fmt.Sprintf("完成 %d 章", got))
+			pass("min_completed_chapters", fmt.Sprintf("Hoàn tất %d chương", got))
 		}
 	}
 
@@ -355,7 +355,7 @@ func gradeContracts(c Case, col Collected, r *Result) {
 		case err != nil:
 			hardFail("checkpoint", err.Error())
 		case !ok:
-			hardFail("checkpoint", "缺少 checkpoint: "+spec)
+			hardFail("checkpoint", "Thiếu checkpoint: "+spec)
 		default:
 			pass("checkpoint", spec)
 		}
@@ -363,9 +363,9 @@ func gradeContracts(c Case, col Collected, r *Result) {
 
 	for _, sig := range e.NoPending {
 		if col.Pending[sig] {
-			hardFail("no_pending", "残留信号: "+sig)
+			hardFail("no_pending", "Tín hiệu còn sót: "+sig)
 		} else {
-			pass("no_pending", sig+" 已清空")
+			pass("no_pending", sig+" đã được xoá")
 		}
 	}
 }

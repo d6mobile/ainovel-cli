@@ -127,7 +127,7 @@ func coCreateStream(ctx context.Context, models *bootstrap.ModelSet, sessions *s
 			ParsedSugs:   reply.Suggestions,
 			Error:        errString(err),
 		}); logErr != nil {
-			slog.Warn("共创会话日志落盘失败", "module", "cocreate", "err", logErr)
+			slog.Warn("Lưu log phiên đồng sáng tạo thất bại", "module", "cocreate", "err", logErr)
 		}
 	}()
 

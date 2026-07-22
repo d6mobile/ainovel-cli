@@ -184,7 +184,7 @@ func TestResolveSegmentationReordersAndDedups(t *testing.T) {
 	if seg.Chapters[2].Title != "第二章 云涌" {
 		t.Fatalf("同字节重复应保留先出现者：%+v", seg.Chapters[2])
 	}
-	if len(seg.Notes) != 1 || !strings.Contains(seg.Notes[0], "重合") {
+	if len(seg.Notes) != 1 || !strings.Contains(seg.Notes[0], "trùng nhau") {
 		t.Fatalf("重复边界应记入 Notes：%v", seg.Notes)
 	}
 }
@@ -208,7 +208,7 @@ func TestResolveSegmentationAbsorbsLeadingText(t *testing.T) {
 	if len(seg.Chapters) != 2 || seg.Chapters[0].Start == 0 {
 		t.Fatalf("章节不应吞掉头部文本：%+v", seg.Chapters)
 	}
-	if len(seg.Notes) != 1 || !strings.Contains(seg.Notes[0], "未被模型归属") {
+	if len(seg.Notes) != 1 || !strings.Contains(seg.Notes[0], "chưa được model gán") {
 		t.Fatalf("应记录人工核对说明：%v", seg.Notes)
 	}
 }
@@ -229,7 +229,7 @@ func TestResolveSegmentationNotesDuplicateTitles(t *testing.T) {
 	if len(seg.Chapters) != 2 {
 		t.Fatalf("应得 2 章，得 %d", len(seg.Chapters))
 	}
-	if len(seg.Notes) != 1 || !strings.Contains(seg.Notes[0], "标题相同") {
+	if len(seg.Notes) != 1 || !strings.Contains(seg.Notes[0], "tiêu đề giống nhau") {
 		t.Fatalf("应记一条同名核对说明：%v", seg.Notes)
 	}
 }
@@ -407,7 +407,7 @@ func TestResolveSegmentationAbsorbsEmptyChapter(t *testing.T) {
 	if got := seg.Content(norm, 0); !strings.Contains(got, "卷二") {
 		t.Fatalf("占位段应并入第一章（文本不丢）：%q", got)
 	}
-	if len(seg.Notes) != 1 || !strings.Contains(seg.Notes[0], "已锁定") {
+	if len(seg.Notes) != 1 || !strings.Contains(seg.Notes[0], "khóa/trả phí") {
 		t.Fatalf("应记录一条人工核对说明：%v", seg.Notes)
 	}
 	// 首点即空正文章节：无前段可并 → 落为 front_matter，同样不失败。
@@ -445,7 +445,7 @@ func TestSegmentClipsContextBoundaries(t *testing.T) {
 	// 裁剪说明走普通进度回显（例行坐标纪律，非警示——warn 色会让用户误以为出错）。
 	var clipNotes int
 	prof := callProfile{progress: func(_, _ int, s string) {
-		if strings.Contains(s, "裁掉") {
+		if strings.Contains(s, "Đã loại") {
 			clipNotes++
 		}
 	}}

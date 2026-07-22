@@ -33,9 +33,9 @@ func (fastRetryErr) Error() string             { return "rate limited" }
 func (fastRetryErr) Retryable() bool           { return true }
 func (fastRetryErr) RetryAfter() time.Duration { return time.Millisecond }
 
-// TestCallStructuredNotifiesRetries 守护重试可见性：请求退避与校验重问都必须回显，
+// TestCallStructuredNotifiesRetries 守护重试可见性：请求退避与hỏi lại sau kiểm tra都必须回显，
 // 否则指数退避可静默数分钟，用户会误以为导入卡死（截图问题：3 分钟无声后才报错）。
-// 请求退避还必须携带非零 retryAt 截止时刻——UI 倒计时依赖它；校验重问即时发生，retryAt 为零。
+// 请求退避还必须携带非零 retryAt 截止时刻——UI 倒计时依赖它；hỏi lại sau kiểm tra即时发生，retryAt 为零。
 func TestCallStructuredNotifiesRetries(t *testing.T) {
 	m := &flakyModel{mockModel: mockModel{responses: []string{"不是 JSON", `{"boundaries":[]}`}}, fails: 2}
 	var notes []string
@@ -45,7 +45,7 @@ func TestCallStructuredNotifiesRetries(t *testing.T) {
 		if !retryAt.IsZero() {
 			retries++
 		}
-		if strings.Contains(s, "重问") {
+		if strings.Contains(s, "hỏi lại") {
 			reasks++
 		}
 	}}
@@ -53,7 +53,7 @@ func TestCallStructuredNotifiesRetries(t *testing.T) {
 		t.Fatalf("最终应成功：%v", err)
 	}
 	if retries != 2 || reasks != 1 {
-		t.Fatalf("应回显 2 次带截止时刻的请求退避 + 1 次校验重问，得 %d/%d：%v", retries, reasks, notes)
+		t.Fatalf("应回显 2 次带截止时刻的请求退避 + 1 lần hỏi lại sau kiểm tra，得 %d/%d：%v", retries, reasks, notes)
 	}
 }
 
@@ -66,12 +66,12 @@ func TestBriefErrIncludesAdapterFacts(t *testing.T) {
 		Provider: "openai", Model: "gpt-x", Message: "Provider returned error",
 	}
 	got := briefErr(fmt.Errorf("外层包装：%w", le))
-	for _, want := range []string{"上游服务错误", "HTTP 502", "openai", "gpt-x", "Provider returned error"} {
+	for _, want := range []string{"Lỗi dịch vụ upstream", "HTTP 502", "openai", "gpt-x", "Provider returned error"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("回显应包含 %q，得 %q", want, got)
 		}
 	}
-	if !strings.HasPrefix(got, "上游服务错误") {
+	if !strings.HasPrefix(got, "Lỗi dịch vụ upstream") {
 		t.Fatalf("结构化事实应在前，得 %q", got)
 	}
 	if got := briefErr(errors.New("普通错误")); got != "普通错误" {

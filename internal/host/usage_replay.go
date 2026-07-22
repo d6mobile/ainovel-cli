@@ -18,7 +18,7 @@ import (
 //
 // 模型归属三级降级：
 //  1. Usage.Provider/Model — agentcore/litellm 透传的真实响应模型（首选）
-//  2. Meta(_meta)          — 上游未透传时，写入侧由 ModelLookup 补的"当时生效"模型
+//  2. Meta(_meta)          — 上游未透传时，写入侧由 ModelLookup 补的"có hiệu lực lúc đó"模型
 //  3. 都没有                — replay 退回 effectiveModel 用当前 ModelSet 反推（精度受损）
 type sessionRecord struct {
 	Role  agentcore.Role     `json:"role"`

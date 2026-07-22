@@ -28,8 +28,8 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, version string) error {
 	cleanup, err := logger.SetupFile(rt.Dir(), "tui.log", false)
 	var logWarning error
 	if err != nil {
-		logWarning = fmt.Errorf("文件日志不可用，已继续使用终端日志：%w", err)
-		slog.Warn("TUI 文件日志不可用，继续运行", "module", "tui", "err", err)
+		logWarning = fmt.Errorf("không dùng được log file, đã tiếp tục dùng log terminal: %w", err)
+		slog.Warn("TUI không dùng được log file, tiếp tục chạy", "module", "tui", "err", err)
 		cleanup = func() {}
 	}
 	defer cleanup()

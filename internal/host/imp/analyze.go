@@ -109,7 +109,7 @@ func analyzedChaptersStrict(w *Workspace, seg *Segmentation, normalized []byte, 
 			break
 		}
 		if err != nil {
-			return n, fmt.Errorf("读取第 %d 章分析工件: %w", c, err)
+			return n, fmt.Errorf("đọc artifact phân tích chương %d: %w", c, err)
 		}
 		if a.InputDigest != chapterInputDigest(segIdentity, promptVersion, seg, normalized, c-1) {
 			break
@@ -126,7 +126,7 @@ func analyzedChaptersStrict(w *Workspace, seg *Segmentation, normalized []byte, 
 func discardAnalysesAfter(w *Workspace, keep, total int) error {
 	for c := keep + 1; c <= total; c++ {
 		if err := os.Remove(w.path(analysisPath(c))); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("清理陈旧分析工件 %s：%w", analysisPath(c), err)
+			return fmt.Errorf("dọn artifact phân tích cũ %s: %w", analysisPath(c), err)
 		}
 	}
 	return nil
@@ -150,7 +150,7 @@ func loadPriorFactsStrict(w *Workspace, count int) ([]ImportedChapterFacts, erro
 	for c := 1; c <= count; c++ {
 		a, err := readArtifact[ChapterAnalysisPayload](w, analysisPath(c))
 		if err != nil {
-			return out, fmt.Errorf("读取第 %d 章分析事实: %w", c, err)
+			return out, fmt.Errorf("đọc dữ kiện phân tích chương %d: %w", c, err)
 		}
 		out = append(out, a.Payload.Facts)
 	}
@@ -190,18 +190,18 @@ func buildLedger(prior []ImportedChapterFacts) string {
 	}
 	var b strings.Builder
 	if len(names) > 0 {
-		b.WriteString("已知人物：")
+		b.WriteString("Nhân vật đã biết: ")
 		b.WriteString(strings.Join(slices.Sorted(maps.Keys(names)), "、"))
 		b.WriteString("\n")
 	}
 	if len(active) > 0 {
-		b.WriteString("活跃伏笔（复用 ID，勿新造）：\n")
+		b.WriteString("Foreshadow đang hoạt động (tái dùng ID, không tạo mới):\n")
 		for _, id := range slices.Sorted(maps.Keys(active)) {
 			fmt.Fprintf(&b, "- %s：%s\n", id, active[id])
 		}
 	}
 	if len(recent) > 0 {
-		b.WriteString("最近状态：")
+		b.WriteString("Trạng thái gần đây: ")
 		b.WriteString(strings.Join(recent, "；"))
 		b.WriteString("\n")
 	}
@@ -254,25 +254,25 @@ func chapterInputDigest(segIdentity, promptVersion string, seg *Segmentation, no
 func validateBatch(r *AnalysisBatchResult, seg *Segmentation, start, end int) error {
 	want := end - start
 	if len(r.Chapters) != want {
-		return fmt.Errorf("批次章节数 %d != 预期 %d", len(r.Chapters), want)
+		return fmt.Errorf("số chương trong batch %d != dự kiến %d", len(r.Chapters), want)
 	}
 	for i, f := range r.Chapters {
 		want := seg.Chapters[start+i]
 		if f.Chapter != want.Number {
-			return fmt.Errorf("批次第 %d 项章号 %d != %d", i, f.Chapter, want.Number)
+			return fmt.Errorf("mục %d trong batch có số chương %d != %d", i, f.Chapter, want.Number)
 		}
 		if strings.TrimSpace(f.Summary) == "" || strings.TrimSpace(f.CoreEvent) == "" {
-			return fmt.Errorf("章 %d summary/core_event 不能为空", f.Chapter)
+			return fmt.Errorf("chương %d summary/core_event không được rỗng", f.Chapter)
 		}
 		if !validHookTypes[strings.ToLower(f.HookType)] {
-			return fmt.Errorf("章 %d hook_type 非法：%q", f.Chapter, f.HookType)
+			return fmt.Errorf("chương %d hook_type không hợp lệ: %q", f.Chapter, f.HookType)
 		}
 		if !validStrands[strings.ToLower(f.DominantStrand)] {
-			return fmt.Errorf("章 %d dominant_strand 非法：%q", f.Chapter, f.DominantStrand)
+			return fmt.Errorf("chương %d dominant_strand không hợp lệ: %q", f.Chapter, f.DominantStrand)
 		}
 		for j, fu := range f.ForeshadowUpdates {
 			if fu.Action == "plant" && strings.TrimSpace(fu.Description) == "" {
-				return fmt.Errorf("章 %d foreshadow[%d] plant 需 description", f.Chapter, j)
+				return fmt.Errorf("chương %d foreshadow[%d] plant cần description", f.Chapter, j)
 			}
 		}
 		// 枚举按小写校验就按小写落盘：commit_chapter 不复验枚举，大小写变体会直通正式状态
@@ -309,27 +309,27 @@ func AnalyzeNext(ctx context.Context, m callModel, systemPrompt string, w *Works
 						digest := chapterInputDigest(segIdentity, promptVersion, seg, normalized, start+i)
 						art := ChapterAnalysisPayload{BatchStart: start + 1, BatchEnd: end, Facts: f}
 						if werr := writeArtifact(w, analysisPath(ch), digest, art); werr != nil {
-							return i, fmt.Errorf("落盘打捞章 %d：%w", ch, werr)
+							return i, fmt.Errorf("lưu chương cứu được %d: %w", ch, werr)
 						}
 					}
-					w.writeFailure(FailureMeta{Stage: "analyze", Detail: fmt.Sprintf("批次 %d-%d 长度截断", start+1, end),
+					w.writeFailure(FailureMeta{Stage: "analyze", Detail: fmt.Sprintf("batch %d-%d bị cắt do độ dài", start+1, end),
 						StopReason: "length", PrefixSalvage: fmt.Sprintf("available:%d", len(salvaged))}, tr.Raw)
-					prof.logger().Info("imp 分析截断，打捞连续前缀", "batch_start", start+1, "salvaged", len(salvaged))
+					prof.logger().Info("imp phân tích bị cắt, cứu tiền tố liên tục", "batch_start", start+1, "salvaged", len(salvaged))
 					echoChapterFacts(prof, salvaged)
 					return len(salvaged), nil
 				}
 				// 无可打捞前缀：记录不可用并「失败 + 缩小重组批」，单章仍截断则报容量不足。
-				w.writeFailure(FailureMeta{Stage: "analyze", Detail: fmt.Sprintf("批次 %d-%d 长度截断，无可打捞前缀", start+1, end),
+				w.writeFailure(FailureMeta{Stage: "analyze", Detail: fmt.Sprintf("batch %d-%d bị cắt do độ dài, không có tiền tố cứu được", start+1, end),
 					StopReason: "length", PrefixSalvage: "unavailable"}, tr.Raw)
 				if end-start > 1 {
-					prof.logger().Warn("imp 分析截断，缩小重组批", "batch", fmt.Sprintf("%d-%d", start+1, end), "prefix_salvage", "unavailable")
+					prof.logger().Warn("imp phân tích bị cắt, thu nhỏ và lập lại batch", "batch", fmt.Sprintf("%d-%d", start+1, end), "prefix_salvage", "unavailable")
 					end = start + (end-start)/2
 					// 无 Key 的进度行：既让用户看见缩批动作，也隔断前后两次独立调用的
 					// 退避行按同 Key 误合并（Key 契约只覆盖同一调用内的瞬态退避）。
-					prof.step(0, 0, "输出被长度截断且无可打捞前缀，缩小批次为第 %d-%d 章重试", start+1, end)
+					prof.step(0, 0, "Đầu ra bị cắt do độ dài và không có tiền tố cứu được, thu nhỏ batch thành chương %d-%d để thử lại", start+1, end)
 					continue
 				}
-				return 0, fmt.Errorf("章 %d 单章批次仍被长度截断，模型可见输出能力不足", start+1)
+				return 0, fmt.Errorf("batch một chương %d vẫn bị cắt do độ dài, khả năng đầu ra thấy được của model không đủ", start+1)
 			}
 			return 0, err
 		}
@@ -338,7 +338,7 @@ func AnalyzeNext(ctx context.Context, m callModel, systemPrompt string, w *Works
 			digest := chapterInputDigest(segIdentity, promptVersion, seg, normalized, start+i)
 			payloadArt := ChapterAnalysisPayload{BatchStart: start + 1, BatchEnd: end, Facts: f}
 			if err := writeArtifact(w, analysisPath(ch), digest, payloadArt); err != nil {
-				return i, fmt.Errorf("落盘章 %d 分析：%w", ch, err)
+				return i, fmt.Errorf("lưu phân tích chương %d: %w", ch, err)
 			}
 		}
 		echoChapterFacts(prof, res.Chapters)
@@ -350,16 +350,16 @@ func AnalyzeNext(ctx context.Context, m callModel, systemPrompt string, w *Works
 // 而非只有机械的批次计数（§14.1）。
 func echoChapterFacts(prof callProfile, facts []ImportedChapterFacts) {
 	for _, f := range facts {
-		prof.step(0, 0, "第 %d 章〈%s〉：%s", f.Chapter, snippet(f.Title, 24), snippet(f.CoreEvent, 60))
+		prof.step(0, 0, "Chương %d <%s>: %s", f.Chapter, snippet(f.Title, 24), snippet(f.CoreEvent, 60))
 	}
 }
 
 // buildAnalyzePayload 组装批次输入：连续章节原文 + 批次前 ledger。
 func buildAnalyzePayload(normalized []byte, seg *Segmentation, ledger string, start, end int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "请分析第 %d-%d 章，返回 {\"chapters\":[每章一个事实对象]}，数组顺序与章号一致。\n\n", start+1, end)
+	fmt.Fprintf(&b, "Hãy phân tích chương %d-%d, trả về {\"chapters\":[mỗi chương một object dữ kiện]}, thứ tự mảng phải khớp số chương.\n\n", start+1, end)
 	if ledger != "" {
-		b.WriteString("## 连续性 ledger（参考）\n\n")
+		b.WriteString("## Ledger liên tục (tham khảo)\n\n")
 		b.WriteString(ledger)
 		b.WriteString("\n")
 	}
