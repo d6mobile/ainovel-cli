@@ -193,3 +193,18 @@ func TestAnalyzedChaptersInvalidatesOnUpstreamChange(t *testing.T) {
 		t.Fatalf("prompt 版本变化应使分析全部失效，得 %d", got)
 	}
 }
+
+func TestBuildAnalyzePayloadIsVietnameseAndPreservesSchema(t *testing.T) {
+	norm, seg := analyzeFixture(t, 2)
+	payload := buildAnalyzePayload(norm, seg, "nhân vật đã biết", 0, 2)
+	for _, want := range []string{"Hãy phân tích chương 1-2", "{\"chapters\"", "## Ledger liên tục", "## 第 1 章："} {
+		if !strings.Contains(payload, want) {
+			t.Fatalf("payload thiếu %q: %s", want, payload)
+		}
+	}
+	for _, preserved := range []string{"chapters", seg.Chapters[0].Title} {
+		if !strings.Contains(payload, preserved) {
+			t.Fatalf("payload phải giữ %q: %s", preserved, payload)
+		}
+	}
+}

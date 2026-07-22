@@ -23,7 +23,7 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 	case agentcore.ProgressToolStart:
 		// Worker 内部的工具调用（如 writer → draft_chapter）。
 		// 注意：TOOL 行可能已经在流式识别阶段被 handleSubagentDelta 提前发出。
-		// 此处：若已发 → 只更新 summary（args 此时完整，能显示 "tool(第N章)"）；否则正常发。
+		// 此处：若已发 → 只更新 summary（args 此时完整，能显示 "tool(chương N)"）；否则正常发。
 		if ev.Progress.Agent == "" || ev.Progress.Tool == "" {
 			break
 		}

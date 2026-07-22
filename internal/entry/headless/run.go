@@ -48,7 +48,7 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 	eng.AskUser().SetHandler(newTerminalAskUser(stdin, stderr).handle)
 	cleanup, err := logger.SetupFile(eng.Dir(), "headless.log", false)
 	if err != nil {
-		fmt.Fprintf(stderr, "警告：文件日志不可用，继续使用终端日志：%v\n", err)
+		fmt.Fprintf(stderr, "Cảnh báo: không dùng được log file, tiếp tục dùng log terminal: %v\n", err)
 		cleanup = func() {}
 	}
 	defer cleanup()

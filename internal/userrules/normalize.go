@@ -68,7 +68,7 @@ func (n *Normalizer) Normalize(ctx context.Context, source, text string) rules.C
 		case err != nil:
 			lastErr = err.Error()
 		case resp == nil:
-			lastErr = "模型返回空响应"
+			lastErr = "Model trả về phản hồi rỗng"
 		default:
 			raw := resp.Message.TextContent()
 			if out, ok := parseNormalizerJSON(raw); ok {
@@ -79,7 +79,7 @@ func (n *Normalizer) Normalize(ctx context.Context, source, text string) rules.C
 					Uncertain:   coerceUncertain(out.Uncertain),
 				}
 			}
-			lastErr = "返回非合法 JSON"
+			lastErr = "Trả về JSON không hợp lệ"
 			// 反馈式重试：把上次的非法输出与纠正提示并入对话，让下一轮带着错误针对性
 			// 重出 JSON，而非原样盲重试。只对"格式坏"有意义——网络错误 / 空响应那两支
 			// 没有可反馈的上次输出，仍是盲重试。
@@ -88,7 +88,7 @@ func (n *Normalizer) Normalize(ctx context.Context, source, text string) rules.C
 				agentcore.Message{Role: agentcore.RoleUser, Content: []agentcore.ContentBlock{agentcore.TextBlock(normalizerRetryHint)}},
 			)
 		}
-		slog.Warn("规则归一化失败",
+		slog.Warn("Chuẩn hóa quy tắc thất bại",
 			"module", "rules", "source", source, "attempt", attempt, "err", lastErr)
 		if ctx.Err() != nil {
 			break // ctx 取消则重试也必失败，直接降级
@@ -103,7 +103,7 @@ func degraded(source, text string) rules.Candidate {
 	return rules.Candidate{
 		Source:      source,
 		Preferences: text,
-		Uncertain:   []string{source + "：归一化失败，已按原文作为风格偏好处理（未提炼机械规则）"},
+		Uncertain:   []string{source + ": chuẩn hóa thất bại, đã dùng nguyên văn làm tùy chọn phong cách (chưa trích xuất quy tắc cơ học)"},
 		Degraded:    true,
 	}
 }

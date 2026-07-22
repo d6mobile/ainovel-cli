@@ -18,7 +18,7 @@ const (
 	FormatEPUB Format = "epub"
 )
 
-// Options 控制导出行为。zero-value 等价于"导出全本到默认路径，文件存在时报错"。
+// Options 控制导出行为。zero-value 等价于"Xuất toàn sách đến đường dẫn mặc định, báo lỗi nếu file đã tồn tại"。
 //
 // 版式：《书名》 → 卷分隔 → 章节正文。两类内部数据不进导出：premise（创作蓝图，
 // 含目标读者 / 核心消费点 / 写作禁区等后台元信息，给作者与引擎看，不是读者的序）；

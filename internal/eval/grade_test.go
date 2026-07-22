@@ -134,20 +134,23 @@ func TestGradeRuntimeErrorFails(t *testing.T) {
 	col.RuntimeErr = "stream EOF"
 	r := Grade(writerSmokeCase(), col)
 	if r.Outcome != Fail {
-		t.Fatalf("运行时错误应 FAIL，得到 %s", r.Outcome)
+		t.Fatalf("Lỗi runtime phải FAIL, nhận được %s", r.Outcome)
+	}
+	if !hasIssue(r.HardFails, "runtime", "Lỗi runtime: stream EOF") {
+		t.Fatalf("phải báo lỗi runtime bằng tiếng Việt, thực tế %+v", r.HardFails)
 	}
 }
 
-// 契约依赖工件读坏不能 false pass，必须 hard fail（fail-loud）。
+// Artifact phụ thuộc contract bị đọc lỗi thì không được false pass, phải hard fail (fail-loud).
 func TestGradeLoadErrorFails(t *testing.T) {
 	col := cleanCollected()
 	col.LoadErrors = []string{"pending_commit: unexpected end of JSON input"}
 	r := Grade(writerSmokeCase(), col)
 	if r.Outcome != Fail {
-		t.Fatalf("工件读取失败应 FAIL，得到 %s", r.Outcome)
+		t.Fatalf("Đọc artifact thất bại phải FAIL, nhận được %s", r.Outcome)
 	}
-	if !hasIssue(r.HardFails, "load", "pending_commit") {
-		t.Fatalf("应报告 load 失败，实际 %+v", r.HardFails)
+	if !hasIssue(r.HardFails, "load", "Đọc artifact thất bại: pending_commit") {
+		t.Fatalf("phải báo load thất bại bằng tiếng Việt, thực tế %+v", r.HardFails)
 	}
 }
 
@@ -170,17 +173,17 @@ func TestGradeDeltaStylestatWarnAndBlock(t *testing.T) {
 	if d.Outcome != Warn {
 		t.Fatalf("stylestat 回归默认应 WARN，得到 %s", d.Outcome)
 	}
-	if !hasIssue(d.Warnings, "delta:stylestat", "文体指标回归") {
-		t.Fatalf("应报告 stylestat warning，实际 %+v", d.Warnings)
+	if !hasIssue(d.Warnings, "delta:stylestat", "Chỉ số văn phong bị hồi quy") {
+		t.Fatalf("phải báo stylestat warning, thực tế %+v", d.Warnings)
 	}
 
 	c.Gate.StylestatRegression = "block"
 	d = GradeDelta(c, base, variant)
 	if d.Outcome != Fail {
-		t.Fatalf("stylestat block 应 FAIL，得到 %s", d.Outcome)
+		t.Fatalf("stylestat block phải FAIL, nhận được %s", d.Outcome)
 	}
-	if !hasIssue(d.HardFails, "delta:stylestat", "文体指标回归") {
-		t.Fatalf("应报告 stylestat hard fail，实际 %+v", d.HardFails)
+	if !hasIssue(d.HardFails, "delta:stylestat", "Chỉ số văn phong bị hồi quy") {
+		t.Fatalf("phải báo stylestat hard fail, thực tế %+v", d.HardFails)
 	}
 }
 
@@ -221,21 +224,21 @@ func TestGradeDeltaCostAndToolCallThresholds(t *testing.T) {
 	if d.Outcome != Warn {
 		t.Fatalf("成本/tool_calls 超阈值应 WARN，得到 %s", d.Outcome)
 	}
-	if !hasIssue(d.Warnings, "delta:tool_calls", "超过阈值") {
-		t.Fatalf("应报告 tool_calls 回归，实际 %+v", d.Warnings)
+	if !hasIssue(d.Warnings, "delta:tool_calls", "vượt ngưỡng") {
+		t.Fatalf("phải báo tool_calls hồi quy, thực tế %+v", d.Warnings)
 	}
-	if !hasIssue(d.Warnings, "delta:cost", "超过阈值") {
-		t.Fatalf("应报告 cost 回归，实际 %+v", d.Warnings)
+	if !hasIssue(d.Warnings, "delta:cost", "vượt ngưỡng") {
+		t.Fatalf("phải báo cost hồi quy, thực tế %+v", d.Warnings)
 	}
 }
 
 func TestGradeDeltaInsufficientStylestatIsNote(t *testing.T) {
 	d := GradeDelta(writerSmokeCase(), cleanResult(), cleanResult())
 	if d.Outcome != Pass {
-		t.Fatalf("样本不足不应改变门禁，得到 %s", d.Outcome)
+		t.Fatalf("thiếu mẫu không được đổi gate, nhận được %s", d.Outcome)
 	}
-	if !hasIssue(d.Notes, "stylestat", "样本不足") {
-		t.Fatalf("应记录 stylestat 样本不足 note，实际 %+v", d.Notes)
+	if !hasIssue(d.Notes, "stylestat", "Thiếu mẫu") {
+		t.Fatalf("phải ghi note stylestat thiếu mẫu, thực tế %+v", d.Notes)
 	}
 }
 

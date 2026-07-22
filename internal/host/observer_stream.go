@@ -19,8 +19,8 @@ func (o *observer) handleSubagentDelta(p *agentcore.ProgressPayload) {
 		return // 工具名未就绪，下一个 delta 再试
 	}
 
-	// 流式识别到工具名时提前发 TOOL 进行中事件，让 spinner 覆盖整段 LLM 生成期间
-	// （否则 draft_chapter 这类工具的"进行中"只在真实 Execute 的几十毫秒里显示）。
+	// 流式识别到工具名时提前发 TOOL Đang chạy事件，让 spinner 覆盖整段 LLM 生成期间
+	// （否则 draft_chapter 这类工具的"Đang chạy"只在真实 Execute 的几十毫秒里显示）。
 	// 真正的 ProgressToolStart 到来时识别到 toolStarts 已有记录，只会补齐 summary。
 	o.ensureSubagentToolStarted(p.Agent, p.Tool)
 	o.updateToolCallSummaryFromDelta(p.Agent, p.Tool, p.Delta)
@@ -77,7 +77,7 @@ func (o *observer) emitStreamDelta(delta string, thinking bool) {
 }
 
 // ensureSubagentToolStarted 在流式识别到 tool_call 首次出现时，提前为该 agent
-// 登记一次进行中的 TOOL 调用，使事件流的 spinner 覆盖"LLM 流式生成 tool_call
+// 登记一次Đang chạy的 TOOL 调用，使事件流的 spinner 覆盖"LLM 流式生成 tool_call
 // 参数"这一段时间（通常占调用总耗时的 99%）。args 此时尚不完整，暂以纯工具名
 // 为 summary；等真正的 ProgressToolStart 到来时会补齐带参数的 summary。
 func (o *observer) ensureSubagentToolStarted(agent, tool string) {
@@ -85,7 +85,7 @@ func (o *observer) ensureSubagentToolStarted(agent, tool string) {
 		return
 	}
 	if _, ok := o.toolStarts[agent]; ok {
-		return // 已有进行中调用，幂等
+		return // 已有Đang chạy调用，幂等
 	}
 	o.resetStreamArgLabel(agent, tool)
 	id := nextEventID()
@@ -132,22 +132,22 @@ func (o *observer) emitFallbackStreamHeader(tool string) {
 }
 
 // streamHeaderFallback 为未配置 extractor 的工具生成流式 header 文本，
-// 让用户即使对轻量读取类工具也能看到"在调用什么"。
+// 让用户即使对轻量读取类工具也能看到"đang gọi gì"。
 //
-// 前缀 "✻ " 是约定的"agent 调度块"标记 — TUI 的 renderStreamContent 见到这个
+// 前缀 "✻ " 是约定的"khối điều phối agent"标记 — TUI 的 renderStreamContent 见到这个
 // 前缀会走 renderAgentBlock 路径渲染（图标 + 高亮 label + 分隔线），
 // 否则会落到正文块路径用终端默认色，header 看起来就是普通正文不醒目。
 func streamHeaderFallback(tool string) string {
 	label := tool
 	switch tool {
 	case "ask_user":
-		label = "向用户提问"
+		label = "hỏi người dùng"
 	}
 	return "✻ " + label
 }
 
 // streamClear 通知 TUI 开启新一轮 streamRound，同时重置与段落分隔相关的状态。
-// 逻辑上新 round 是"空 stream"，否则下一次首个 extractor emit 会误补前导空行。
+// 逻辑上新 round 是"stream rỗng"，否则下一次首个 extractor emit 会误补前导空行。
 //
 // streamThinking 必须一并重置：emitStreamDelta 用 streamThinking 跨调用追踪
 // 上一段是不是思考。新 round 内还没输出过任何内容，下一次 emit(thinking=false)

@@ -257,3 +257,19 @@ func TestContract_RunUnknownAgentIsTyped(t *testing.T) {
 		t.Fatalf("未注册 agent 应匹配 subagent.ErrUnknownAgent，got %v", err)
 	}
 }
+
+func TestParseThinkingLevelInvalidErrorIsVietnamese(t *testing.T) {
+	_, err := ParseThinkingLevel("turbo")
+	if err == nil {
+		t.Fatal("expected invalid thinking level error")
+	}
+	msg := err.Error()
+	for _, bad := range []string{"无效", "可选"} {
+		if strings.Contains(msg, bad) {
+			t.Fatalf("thinking level error còn tiếng Trung marker %q: %q", bad, msg)
+		}
+	}
+	if !strings.Contains(msg, "Mức suy luận không hợp lệ") {
+		t.Fatalf("thinking level error chưa được Việt hóa: %q", msg)
+	}
+}

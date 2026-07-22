@@ -119,7 +119,7 @@ func collectStyle(s *store.Store, prog *domain.Progress, check func(string, erro
 			text, err := s.Drafts.LoadChapterText(ch)
 			check(fmt.Sprintf("chapter:%d", ch), err)
 			if strings.TrimSpace(text) == "" {
-				check(fmt.Sprintf("chapter:%d", ch), fmt.Errorf("progress 标记已完成但终稿为空"))
+				check(fmt.Sprintf("chapter:%d", ch), fmt.Errorf("progress đánh dấu đã hoàn tất nhưng bản cuối rỗng"))
 				continue
 			}
 			input.Chapters = append(input.Chapters, text)
@@ -261,7 +261,7 @@ func (c Collected) HasCheckpoint(spec string) (bool, error) {
 func parseCheckpointSpec(spec string) (domain.Scope, string, error) {
 	parts := strings.Split(spec, ":")
 	bad := func() (domain.Scope, string, error) {
-		return domain.Scope{}, "", fmt.Errorf("非法 checkpoint 契约: %q", spec)
+		return domain.Scope{}, "", fmt.Errorf("contract checkpoint không hợp lệ: %q", spec)
 	}
 	if len(parts) < 2 {
 		return bad()

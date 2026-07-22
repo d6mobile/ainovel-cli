@@ -22,7 +22,7 @@ const (
 	callMaxRetryDelay       = 60 * time.Second
 )
 
-const callRetryHint = "上面的输出不是合法 JSON 或缺少必填字段。只输出一个符合约定 schema 的 JSON 对象，不要任何解释文字，不要 Markdown 代码围栏。"
+const callRetryHint = "Đầu ra phía trên không phải JSON hợp lệ hoặc thiếu trường bắt buộc. Chỉ xuất một JSON object đúng schema đã thỏa thuận, không thêm giải thích, không dùng Markdown code fence."
 
 // callModel 是内核对模型的最小依赖，便于测试注入 mock。
 type callModel interface {
@@ -34,7 +34,9 @@ type errTruncated struct {
 	Raw string
 }
 
-func (e *errTruncated) Error() string { return "模型输出被长度截断（stop=length）" }
+func (e *errTruncated) Error() string {
+	return "Đầu ra của model bị cắt do độ dài (stop=length)"
+}
 
 // errSemantic 表示输出层语义失败（JSON/校验多次仍非法），携带最后一次原始响应，
 // 供 runner 统一落 failures/ 失败工件（§14.2），所有语义函数共用。
@@ -121,23 +123,23 @@ func briefErr(err error) string {
 
 // errTypeLabels 把 litellm 错误分类翻成一眼可读的中文短标签。
 var errTypeLabels = map[litellm.ErrorType]string{
-	litellm.ErrorTypeAuth:            "鉴权失败",
-	litellm.ErrorTypeRateLimit:       "限流",
-	litellm.ErrorTypeNetwork:         "网络错误",
-	litellm.ErrorTypeValidation:      "请求参数非法",
-	litellm.ErrorTypeProvider:        "上游服务错误",
-	litellm.ErrorTypeTimeout:         "超时",
-	litellm.ErrorTypeQuota:           "配额不足",
-	litellm.ErrorTypeModel:           "模型不可用",
-	litellm.ErrorTypeInternal:        "内部错误",
-	litellm.ErrorTypeContextOverflow: "上下文超限",
-	litellm.ErrorTypeOverloaded:      "上游过载",
-	litellm.ErrorTypeContentFilter:   "内容过滤拦截",
+	litellm.ErrorTypeAuth:            "Xác thực thất bại",
+	litellm.ErrorTypeRateLimit:       "Bị giới hạn tốc độ",
+	litellm.ErrorTypeNetwork:         "Lỗi mạng",
+	litellm.ErrorTypeValidation:      "Tham số yêu cầu không hợp lệ",
+	litellm.ErrorTypeProvider:        "Lỗi dịch vụ upstream",
+	litellm.ErrorTypeTimeout:         "Hết thời gian chờ",
+	litellm.ErrorTypeQuota:           "Không đủ quota",
+	litellm.ErrorTypeModel:           "Model không khả dụng",
+	litellm.ErrorTypeInternal:        "Lỗi nội bộ",
+	litellm.ErrorTypeContextOverflow: "Vượt giới hạn context",
+	litellm.ErrorTypeOverloaded:      "Upstream quá tải",
+	litellm.ErrorTypeContentFilter:   "Bị bộ lọc nội dung chặn",
 }
 
 // modelErrDetail 从错误链提取适配器的结构化事实（错误分类、HTTP 状态、provider、模型）。
 // 网关的 message 常常只有一句空泛的 "Provider returned error"，单靠它无法判断是配置错、
-// 上游故障还是限流；这些事实 litellm 一直带着，只是不进 Error() 文案。agentcore 适配器的
+// 上游故障还是Bị giới hạn tốc độ；这些事实 litellm 一直带着，只是不进 Error() 文案。agentcore 适配器的
 // Unwrap 明确允许知道 litellm 的调用方 errors.As 取原始错误。非模型调用错误返回空串。
 func modelErrDetail(err error) string {
 	var le *litellm.LiteLLMError
@@ -176,7 +178,7 @@ func (p callProfile) callOptions(maxTokens int) []agentcore.CallOption {
 func callStructured[T any](ctx context.Context, m callModel, systemPrompt, payload string, maxTokens int, prof callProfile, validate func(*T) error) (T, error) {
 	var zero T
 	if m == nil {
-		return zero, fmt.Errorf("imp: model 未配置")
+		return zero, fmt.Errorf("imp: chưa cấu hình model")
 	}
 	messages := []agentcore.Message{
 		agentcore.SystemMsg(systemPrompt),
@@ -191,12 +193,12 @@ func callStructured[T any](ctx context.Context, m callModel, systemPrompt, paylo
 		resp, err := generateWithRetry(ctx, m, prof, messages, opts...)
 		if err != nil {
 			if d := modelErrDetail(err); d != "" {
-				return zero, fmt.Errorf("imp: 模型调用失败（%s）：%w", d, err)
+				return zero, fmt.Errorf("imp: gọi model thất bại (%s): %w", d, err)
 			}
-			return zero, fmt.Errorf("imp: 模型调用失败：%w", err)
+			return zero, fmt.Errorf("imp: gọi model thất bại: %w", err)
 		}
 		if resp == nil {
-			lastErr = fmt.Errorf("模型返回空响应")
+			lastErr = fmt.Errorf("Model trả về phản hồi rỗng")
 			break
 		}
 		raw := resp.Message.TextContent()
@@ -210,32 +212,32 @@ func callStructured[T any](ctx context.Context, m callModel, systemPrompt, paylo
 		}
 		lastErr = verr
 		messages = append(messages, assistantMsg(raw),
-			agentcore.UserMsg(callRetryHint+"\n错误："+verr.Error()))
+			agentcore.UserMsg(callRetryHint+"\nLỗi: "+verr.Error()))
 		if ctx.Err() != nil {
 			break
 		}
 		if attempt < callMaxSemanticAttempts {
-			prof.say("输出校验未通过（%s），带错误反馈重问（尝试 %d/%d）", briefErr(verr), attempt+1, callMaxSemanticAttempts)
+			prof.say("Đầu ra chưa qua kiểm tra hợp lệ (%s), hỏi lại kèm phản hồi lỗi (lần thử %d/%d)", briefErr(verr), attempt+1, callMaxSemanticAttempts)
 		}
-		prof.logger().Warn("imp 结构化输出重试", "attempt", attempt, "err", verr)
+		prof.logger().Warn("imp thử lại đầu ra có cấu trúc", "attempt", attempt, "err", verr)
 	}
 	// 用户取消不是语义失败：不落 failures/ 工件、不报「N 次尝试」误导排查方向。
 	if ctx.Err() != nil {
 		return zero, ctx.Err()
 	}
 	return zero, &errSemantic{Raw: lastRaw,
-		Err: fmt.Errorf("imp: 结构化输出失败（%d 次尝试）：%w", attempts, lastErr)}
+		Err: fmt.Errorf("imp: đầu ra có cấu trúc thất bại (sau %d lần thử): %w", attempts, lastErr)}
 }
 
 // parseStructured 从原始文本截取 JSON 对象、解析进 T 并 validate。
 func parseStructured[T any](raw string, validate func(*T) error) (*T, error) {
 	s := extractJSONObject(raw)
 	if s == "" {
-		return nil, fmt.Errorf("输出中未找到 JSON 对象")
+		return nil, fmt.Errorf("Không tìm thấy JSON object trong đầu ra")
 	}
 	var out T
 	if err := json.Unmarshal([]byte(s), &out); err != nil {
-		return nil, fmt.Errorf("解析 JSON：%w", err)
+		return nil, fmt.Errorf("phân tích JSON: %w", err)
 	}
 	if validate != nil {
 		if err := validate(&out); err != nil {
@@ -259,9 +261,9 @@ func generateWithRetry(ctx context.Context, m callModel, prof callProfile, messa
 			return nil, err
 		}
 		delay := retryDelay(err, attempt)
-		prof.sayRetry(time.Now().Add(delay), "模型请求失败（%s），重试第 %d/%d 次", briefErr(err), attempt+1, callMaxRequestRetries)
+		prof.sayRetry(time.Now().Add(delay), "Yêu cầu model thất bại (%s), thử lại lần %d/%d", briefErr(err), attempt+1, callMaxRequestRetries)
 		// 面板回显截断到单行，完整错误链只有日志能承载（重试后成功的请求不会落失败工件）。
-		prof.logger().Warn("imp 模型请求重试", "attempt", attempt+1, "max", callMaxRequestRetries, "delay", delay, "err", err)
+		prof.logger().Warn("imp thử lại yêu cầu model", "attempt", attempt+1, "max", callMaxRequestRetries, "delay", delay, "err", err)
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():

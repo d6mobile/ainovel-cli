@@ -53,16 +53,16 @@ func (f InterventionFacts) QueueHead() int {
 func CollectInterventionFacts(st *storepkg.Store) (InterventionFacts, error) {
 	var f InterventionFacts
 	if st == nil {
-		return f, fmt.Errorf("store 不能为空")
+		return f, fmt.Errorf("store không được để trống")
 	}
 	missing, err := st.FoundationMissing()
 	if err != nil {
-		return f, fmt.Errorf("读取基础设定状态: %w", err)
+		return f, fmt.Errorf("đọc trạng thái thiết lập nền: %w", err)
 	}
 	f.FoundationMissing = missing
 	p, err := st.Progress.Load()
 	if err != nil {
-		return f, fmt.Errorf("读取进度: %w", err)
+		return f, fmt.Errorf("đọc tiến độ: %w", err)
 	}
 	if p != nil {
 		f.Phase = string(p.Phase)
@@ -76,7 +76,7 @@ func CollectInterventionFacts(st *storepkg.Store) (InterventionFacts, error) {
 	}
 	meta, err := st.RunMeta.Load()
 	if err != nil {
-		return f, fmt.Errorf("读取运行元信息: %w", err)
+		return f, fmt.Errorf("đọc siêu dữ liệu lượt chạy: %w", err)
 	}
 	if meta != nil {
 		f.PlanningTier = string(meta.PlanningTier)
@@ -92,7 +92,7 @@ func CollectInterventionFacts(st *storepkg.Store) (InterventionFacts, error) {
 	}
 	recent, err := st.Decisions.Recent(5)
 	if err != nil {
-		return f, fmt.Errorf("读取近期裁定: %w", err)
+		return f, fmt.Errorf("đọc các phân xử gần đây: %w", err)
 	}
 	for _, r := range recent {
 		if r.Kind != "intervention" {
@@ -132,10 +132,10 @@ type InterventionDecision struct {
 // ValidateAgainst 按事实做机械校验(场景内合法性;类型已排除跨场景动作)。
 func (d *InterventionDecision) ValidateAgainst(f InterventionFacts) error {
 	if strings.TrimSpace(d.Reason) == "" {
-		return fmt.Errorf("reason 不能为空")
+		return fmt.Errorf("reason không được để trống")
 	}
 	if d.Answer == "" && d.Rules == "" && d.Hold == nil && d.Reopen == nil && d.Dispatch == nil {
-		return fmt.Errorf("空决策：至少要有一个动作或 answer")
+		return fmt.Errorf("quyết định rỗng: cần có ít nhất một hành động hoặc answer")
 	}
 	if err := d.Dispatch.validate(); err != nil {
 		return err
@@ -146,29 +146,29 @@ func (d *InterventionDecision) ValidateAgainst(f InterventionFacts) error {
 	complete := f.Phase == string(domain.PhaseComplete)
 	if d.Reopen != nil {
 		if !complete {
-			return fmt.Errorf("reopen 仅限完本期（当前 phase=%s）", f.Phase)
+			return fmt.Errorf("reopen chỉ dùng trong giai đoạn hoàn tất (phase hiện tại=%s)", f.Phase)
 		}
 		if len(d.Reopen.Chapters) == 0 {
-			return fmt.Errorf("reopen.chapters 不能为空")
+			return fmt.Errorf("reopen.chapters không được để trống")
 		}
 		for _, ch := range d.Reopen.Chapters {
 			if ch < 1 || ch > f.CompletedChapters {
-				return fmt.Errorf("reopen 章节 %d 越界（已完成 %d 章）", ch, f.CompletedChapters)
+				return fmt.Errorf("chương reopen %d vượt phạm vi (đã hoàn thành %d chương)", ch, f.CompletedChapters)
 			}
 		}
 	}
 	if complete && d.Dispatch != nil {
-		return fmt.Errorf("完本期禁止直接派单；返工用 reopen（入队后由 Router 自动派发）")
+		return fmt.Errorf("giai đoạn hoàn tất cấm dispatch trực tiếp; hãy dùng reopen để làm lại (sau khi vào hàng đợi, Router sẽ tự động dispatch)")
 	}
 	if d.Hold != nil && !d.Hold.Cancel {
 		if f.Phase != string(domain.PhaseWriting) {
-			return fmt.Errorf("一次性暂停仅限写作期（当前 phase=%s）", f.Phase)
+			return fmt.Errorf("tạm dừng một lần chỉ dùng trong giai đoạn viết (phase hiện tại=%s)", f.Phase)
 		}
 		if !d.Hold.After.Valid() {
-			return fmt.Errorf("hold.after 必须是 boundary 或 rewrites_drained")
+			return fmt.Errorf("hold.after phải là boundary hoặc rewrites_drained")
 		}
 		if strings.TrimSpace(d.Hold.Reason) == "" {
-			return fmt.Errorf("设置一次性暂停必须带 reason（用户诉求摘要）")
+			return fmt.Errorf("thiết lập tạm dừng một lần phải có reason (tóm tắt yêu cầu của người dùng)")
 		}
 	}
 	return nil
@@ -181,15 +181,15 @@ func validateDispatchAgainst(dispatch *DispatchOp, phase string) error {
 		return nil
 	}
 	if phase == "" {
-		return fmt.Errorf("缺少 phase，禁止执行派单")
+		return fmt.Errorf("thiếu phase, cấm thực thi dispatch")
 	}
 	if phase == string(domain.PhaseComplete) {
-		return fmt.Errorf("完本期禁止直接派单")
+		return fmt.Errorf("giai đoạn hoàn tất cấm dispatch trực tiếp")
 	}
 	switch dispatch.Agent {
 	case "writer", "editor":
 		if phase != string(domain.PhaseWriting) {
-			return fmt.Errorf("%s 仅能在 writing 阶段派发（当前 phase=%s）", dispatch.Agent, phase)
+			return fmt.Errorf("%s chỉ được dispatch ở phase writing (phase hiện tại=%s)", dispatch.Agent, phase)
 		}
 	}
 	return nil

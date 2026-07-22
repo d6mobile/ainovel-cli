@@ -36,7 +36,7 @@ const (
 //  1. Progress 缺失 / Phase 终态 → LLM 裁定（nil）
 //  2. 规划期（非写作期）：设定缺项且规划师可判定（save_foundation 已落过 scale）
 //     → 照缺项续派同一规划师；否则 → LLM 裁定（nil，含首次规划师选型）
-//  3. 重写/打磨队列非空 → writer 按队列头（绝对优先，压过一切弧末事务）
+//  3. Viết lại/Chỉnh sửa队列非空 → writer 按队列头（绝对优先，压过一切弧末事务）
 //  4. Flow=Reviewing / Steering → LLM 裁定（nil）
 //  5. 分层模式弧末 → 评审 → 弧摘要 → (卷末)卷摘要 → 展开下一弧 → 追加新卷
 //  6. 其余 → writer 续写下一章
@@ -72,7 +72,7 @@ func expectedInstruction(s State) expectKind {
 			return expectNewVolume
 		}
 	}
-	// 非分层:每 ReviewInterval 章一次全局审阅(未做则先审阅再续写)。
+	// 非分层:每 ReviewInterval 章一次Đánh giá toàn cục(未做则先审阅再续写)。
 	if !p.Layered && s.LastCompleted > 0 {
 		if due, _ := domain.ShouldReview(len(p.CompletedChapters)); due && !s.HasGlobalReview {
 			return expectGlobalReview
@@ -90,16 +90,16 @@ func classify(t *testing.T, inst *Instruction) expectKind {
 	switch inst.Agent {
 	case "writer":
 		switch {
-		case contains(inst.Task, "Viết lại") || contains(inst.Task, "Chỉnh sửa") || contains(inst.Task, "重写") || contains(inst.Task, "打磨"):
+		case contains(inst.Task, "Viết lại") || contains(inst.Task, "Chỉnh sửa") || contains(inst.Task, "Viết lại") || contains(inst.Task, "Chỉnh sửa"):
 			return expectRewrite
-		case contains(inst.Task, "Viết chương") || contains(inst.Task, "写第"):
+		case contains(inst.Task, "Viết chương") || contains(inst.Task, "Viết chương"):
 			return expectNextChapter
 		}
 	case "editor":
 		switch {
-		case contains(inst.Task, "弧级评审"):
+		case contains(inst.Task, "Đánh giá cấp cung"):
 			return expectArcReview
-		case contains(inst.Task, "全局审阅"):
+		case contains(inst.Task, "Đánh giá toàn cục"):
 			return expectGlobalReview
 		case contains(inst.Task, "save_arc_summary"):
 			return expectArcSummary
@@ -108,7 +108,7 @@ func classify(t *testing.T, inst *Instruction) expectKind {
 		}
 	case "architect_long":
 		switch {
-		case contains(inst.Task, "补齐基础设定"):
+		case contains(inst.Task, "Bổ sung thiếu sót trong thiết lập nền tảng"):
 			return expectFoundationFill
 		case contains(inst.Task, "expand_arc"):
 			return expectExpandArc
@@ -116,11 +116,11 @@ func classify(t *testing.T, inst *Instruction) expectKind {
 			return expectNewVolume
 		}
 	case "architect_short":
-		if contains(inst.Task, "补齐基础设定") {
+		if contains(inst.Task, "Bổ sung thiếu sót trong thiết lập nền tảng") {
 			return expectFoundationFill
 		}
 	}
-	t.Fatalf("无法归类的指令：agent=%q task=%q", inst.Agent, inst.Task)
+	t.Fatalf("không phân loại được chỉ thị: agent=%q task=%q", inst.Agent, inst.Task)
 	return expectNil
 }
 
@@ -198,7 +198,7 @@ func TestRoute_ExhaustiveAgainstSpec(t *testing.T) {
 	phases := []domain.Phase{domain.PhaseInit, domain.PhasePremise, domain.PhaseOutline, domain.PhaseWriting, domain.PhaseComplete}
 	flows := []domain.FlowState{domain.FlowWriting, domain.FlowReviewing, domain.FlowRewriting, domain.FlowPolishing, domain.FlowSteering}
 	queues := [][]int{nil, {7, 9}}
-	// {1..5} 命中 ReviewInterval(=5)的全局审阅触发点
+	// {1..5} 命中 ReviewInterval(=5)的Đánh giá toàn cục触发点
 	completedSets := [][]int{nil, {1, 2, 3}, {1, 2, 3, 4, 5}}
 	missingSets := [][]string{nil, {"characters", "world_rules"}}
 	tiers := []domain.PlanningTier{"", domain.PlanningTierShort, domain.PlanningTierLong}
@@ -283,7 +283,7 @@ func assertConservation(t *testing.T, s State, inst *Instruction) {
 		if s.PlanningTier == domain.PlanningTierShort {
 			wantPlanner = "architect_short"
 		}
-		if inst.Agent != wantPlanner || !contains(inst.Task, "补齐基础设定") || inst.Chapter != 0 {
+		if inst.Agent != wantPlanner || !contains(inst.Task, "Bổ sung thiếu sót trong thiết lập nền tảng") || inst.Chapter != 0 {
 			t.Fatalf("规划期指令必须是补齐派单且规划师匹配 tier=%q：%+v", s.PlanningTier, inst)
 		}
 		return
@@ -295,7 +295,7 @@ func assertConservation(t *testing.T, s State, inst *Instruction) {
 		}
 		if len(p.PendingRewrites) > 0 {
 			if inst.Chapter != p.PendingRewrites[0] {
-				t.Fatalf("重写队列非空时必须派队列头 %d，got %d", p.PendingRewrites[0], inst.Chapter)
+				t.Fatalf("Viết lại队列非空时必须派队列头 %d，got %d", p.PendingRewrites[0], inst.Chapter)
 			}
 			wantVerb := "Viết lại"
 			if p.Flow == domain.FlowPolishing {

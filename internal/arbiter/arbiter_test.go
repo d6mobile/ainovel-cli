@@ -48,10 +48,21 @@ func TestDecidePlanStartDoesNotSendThinkingToChatModel(t *testing.T) {
 		t.Fatalf("decide: %v", err)
 	}
 	if m.lastCfg.ThinkingLevel != agentcore.ThinkingAuto {
-		t.Fatalf("Arbiter 不应向普通 chat 模型发送 thinking 参数, got %q", m.lastCfg.ThinkingLevel)
+		t.Fatalf("Arbiter không nên gửi tham số thinking cho model chat thường, got %q", m.lastCfg.ThinkingLevel)
 	}
 	if m.lastCfg.MaxTokens != decideMaxTokens {
 		t.Fatalf("max_tokens = %d, want %d", m.lastCfg.MaxTokens, decideMaxTokens)
+	}
+}
+
+func TestArbiterRetryHintIsVietnamese(t *testing.T) {
+	for _, bad := range []string{"上面", "请", "不要"} {
+		if strings.Contains(retryHint, bad) {
+			t.Fatalf("retry hint còn tiếng Trung marker %q: %q", bad, retryHint)
+		}
+	}
+	if !strings.Contains(retryHint, "Chỉ xuất") || !strings.Contains(retryHint, "không bọc Markdown") {
+		t.Fatalf("retry hint chưa có hướng dẫn tiếng Việt: %q", retryHint)
 	}
 }
 

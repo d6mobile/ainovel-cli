@@ -132,8 +132,24 @@ func TestWriterStopGuard_StageAwareBlockMessage(t *testing.T) {
 		t.Fatalf("append consistency_check: %v", err)
 	}
 	d = guard(context.Background(), normalStop)
-	if !strings.Contains(d.InjectMessage, "commit_chapter") || !strings.Contains(d.InjectMessage, "错误") {
+	if !strings.Contains(d.InjectMessage, "commit_chapter") || !strings.Contains(d.InjectMessage, "lỗi") {
 		t.Fatalf("ready-to-commit message should mention commit and error handling, got %q", d.InjectMessage)
+	}
+}
+
+func TestSubAgentGuard_BlockMessagesAreVietnamese(t *testing.T) {
+	messages := []string{
+		writerBlockMsg(map[string]struct{}{}),
+		writerBlockMsg(map[string]struct{}{"draft": {}}),
+		writerBlockMsg(map[string]struct{}{"draft": {}, "consistency_check": {}}),
+		staticBlockMsg("Bạn phải gọi save_review để lưu kết quả trước khi kết thúc.")(nil),
+	}
+	for _, msg := range messages {
+		for _, bad := range []string{"禁止结束", "必须", "错误", "落盘", "结束"} {
+			if strings.Contains(msg, bad) {
+				t.Fatalf("guard message còn tiếng Trung marker %q: %q", bad, msg)
+			}
+		}
 	}
 }
 

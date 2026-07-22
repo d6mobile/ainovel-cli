@@ -28,10 +28,10 @@ func (h *Host) ConfigureGeneralSettings(draft GeneralSettingsDraft) error {
 		return err
 	}
 	if h.configPath == "" {
-		return fmt.Errorf("无法定位配置文件路径")
+		return fmt.Errorf("Không thể xác định đường dẫn file cấu hình")
 	}
 	if err := bootstrap.SaveConfig(h.configPath, candidate); err != nil {
-		return fmt.Errorf("保存配置失败: %w", err)
+		return fmt.Errorf("Lưu cấu hình thất bại: %w", err)
 	}
 
 	h.cfg = candidate

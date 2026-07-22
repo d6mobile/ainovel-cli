@@ -65,6 +65,23 @@ func TestLoad_NoOverrides(t *testing.T) {
 	}
 }
 
+func TestOverridePromptUnsupportedErrorIsVietnamese(t *testing.T) {
+	b := Load("default", LoadOptions{})
+	err := b.OverridePrompt("import-segment.md", "raw")
+	if err == nil {
+		t.Fatal("expected unsupported prompt override error")
+	}
+	msg := err.Error()
+	for _, bad := range []string{"不支持", "覆盖", "仅核心提示词"} {
+		if strings.Contains(msg, bad) {
+			t.Fatalf("OverridePrompt error còn tiếng Trung marker %q: %q", bad, msg)
+		}
+	}
+	if !strings.Contains(msg, "Không hỗ trợ ghi đè file prompt") {
+		t.Fatalf("OverridePrompt error chưa được Việt hóa: %q", msg)
+	}
+}
+
 func TestInterventionPromptsKeepScopeContract(t *testing.T) {
 	prompts := loadPrompts()
 	for _, phrase := range []string{"ngữ cảnh không đồng nghĩa với ủy quyền sửa đổi", "phạm vi đầy đủ tối thiểu", "phạm vi phân tích không đồng nghĩa với phạm vi sửa đổi"} {

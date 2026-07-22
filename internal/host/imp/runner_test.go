@@ -158,7 +158,7 @@ func TestRunRejectsDifferentSource(t *testing.T) {
 			runErr = ev.Err
 		}
 	}
-	if runErr == nil || !strings.Contains(runErr.Error(), "内容不同") {
+	if runErr == nil || !strings.Contains(runErr.Error(), "khác nội dung") {
 		t.Fatalf("不同源文件应被明确拒绝，得 %v", runErr)
 	}
 }
@@ -182,7 +182,7 @@ func TestConfirmNotesGate(t *testing.T) {
 	if r.confirm() {
 		t.Fatal("--yes 不应放行带容错说明的切分")
 	}
-	if ev := <-r.events; !strings.Contains(ev.Message, "未自动放行") {
+	if ev := <-r.events; !strings.Contains(ev.Message, "chưa tự động cho qua") {
 		t.Fatalf("预览应说明未放行原因：%q", ev.Message)
 	}
 	if !newRunner(Options{AutoConfirm: true}, nil).confirm() {

@@ -67,7 +67,7 @@ func ParseThinkingLevel(s string) (agentcore.ThinkingLevel, error) {
 		agentcore.ThinkingHigh, agentcore.ThinkingXHigh, agentcore.ThinkingMax:
 		return lv, nil
 	default:
-		return "", fmt.Errorf("无效推理强度 %q（可选：off/low/medium/high/xhigh/max）", s)
+		return "", fmt.Errorf("Mức suy luận không hợp lệ %q (chọn: off/low/medium/high/xhigh/max)", s)
 	}
 }
 
@@ -91,7 +91,7 @@ func AvailableThinkingForModel(model agentcore.ChatModel) []agentcore.ThinkingLe
 func roleThinking(cfg bootstrap.Config, role string) agentcore.ThinkingLevel {
 	lv, err := ParseThinkingLevel(cfg.ResolveReasoningEffort(role))
 	if err != nil {
-		slog.Warn("忽略无效推理强度配置", "module", "agent", "role", role, "err", err)
+		slog.Warn("Bỏ qua cấu hình mức suy luận không hợp lệ", "module", "agent", "role", role, "err", err)
 		return ""
 	}
 	return lv
@@ -144,7 +144,7 @@ func BuildWorkers(
 
 	// Provider failover 只记日志,不通知宿主
 	reportFailover := func(ev bootstrap.FailoverEvent) {
-		slog.Warn("provider 切换",
+		slog.Warn("Chuyển provider",
 			"module", "agent",
 			"role", ev.Role,
 			"reason", ev.Reason,
@@ -285,7 +285,7 @@ func BuildWorkers(
 
 	editor := subagent.Config{
 		Name:               "editor",
-		Description:        "审阅者：阅读原文，从结构和审美两个层面发现问题",
+		Description:        "Người đánh giá: đọc nguyên văn, phát hiện vấn đề ở cả tầng cấu trúc và thẩm mỹ",
 		Model:              editorModel,
 		SystemPrompt:       bundle.Prompts.Editor,
 		Tools:              editorTools,
